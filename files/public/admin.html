@@ -1,0 +1,472 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Admin</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    body {
+      background: #f3ead6;
+    }
+    body::before {
+      display: none;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #fff;
+    }
+    td, th {
+      padding: 8px;
+      border-bottom: 1px solid #ddd;
+      text-align: left;
+      font-size: .9rem;
+    }
+    .tabs button {
+      padding: 10px 20px;
+      border: 0;
+      background: #e5d3a5;
+      cursor: pointer;
+      font: inherit;
+    }
+    .tabs .on {
+      background: #2f2013;
+      color: #fff8e7;
+    }
+    .sm {
+      padding: 5px 10px;
+      cursor: pointer;
+      margin-right: 4px;
+    }
+    .row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    .pv {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .pv div {
+      position: relative;
+    }
+    .pv img {
+      width: 80px;
+      height: 80px;
+      object-fit: cover;
+      border-radius: 8px;
+    }
+    .pv b {
+      position: absolute;
+      top: -6px;
+      right: -6px;
+      background: #c0392b;
+      color: #fff;
+      border-radius: 50%;
+      width: 20px;
+      height: 20px;
+      text-align: center;
+      cursor: pointer;
+    }
+    .scroll {
+      overflow-x: auto;
+    }
+    .acts {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-top: 6px;
+    }
+    .cn {
+      padding: 10px 24px;
+      border-radius: 30px;
+      border: 1px solid #bba57c;
+      background: #fff;
+      cursor: pointer;
+      font: inherit;
+    }
+    .cn:hover {
+      background: #f4e8c8;
+    }
+    .tp {
+      width: 56px;
+      height: 56px;
+      object-fit: cover;
+      border-radius: 8px;
+      display: block;
+    }
+    main {
+      width: min(1300px, 96%);
+    }
+    input[type=radio] {
+      width: auto;
+      margin: 0 6px 0 0;
+      padding: 0;
+    }
+    .ot {
+      border-radius: 12px;
+      box-shadow: 0 2px 10px rgba(0,0,0,.12);
+    }
+    .ot td, .ot th {
+      padding: 9px 7px;
+      font-size: .85rem;
+      vertical-align: middle;
+      word-break: break-word;
+    }
+    .ot th {
+      background: #5c3418;
+      color: #fff8e7;
+      font-size: .75rem;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+    }
+    .ot tr:nth-child(even) td {
+      background: #fbf5e6;
+    }
+    .ot tr:hover td {
+      background: #f4e8c8;
+    }
+    .ot tr.dn td {
+      background: #e3f4e6 !important;
+    }
+    .ot label {
+      display: block;
+      white-space: nowrap;
+      cursor: pointer;
+      line-height: 1.7;
+    }
+    .del {
+      background: #fff;
+      border: 1px solid #c0392b;
+      color: #c0392b;
+      border-radius: 8px;
+      padding: 6px 10px;
+      cursor: pointer;
+      font: inherit;
+      font-size: .8rem;
+    }
+    .del:hover {
+      background: #c0392b;
+      color: #fff;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="panel" id="login" style="max-width:380px;margin:60px auto">
+      <h2>Admin</h2>
+      <input id="pw" type="password" placeholder="Password">
+      <button class="cta" id="go">Log in</button>
+      <p id="le" style="color:#c0392b"></p>
+    </div>
+
+    <div id="app" style="display:none">
+      <div class="tabs">
+        <button data-t="products" class="on">Products</button>
+        <button data-t="comments">Comments</button>
+        <button data-t="orders">Orders</button>
+        <button id="out" style="float:right">Log out</button>
+      </div>
+      <div class="panel" id="v"></div>
+    </div>
+  </main>
+
+  <script>
+    const $ = s => document.querySelector(s);
+    let tok = sessionStorage.getItem('tok'), tab = 'products', imgs = [], editId = null;
+
+    const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;'
+    }[c]));
+
+    async function api(u, m = 'GET', b) {
+      const r = await fetch(u, {
+        method: m,
+        headers: { 'Content-Type': 'application/json', 'x-token': tok || '' },
+        body: b ? JSON.stringify(b) : undefined
+      });
+      if (r.status === 401 && u !== '/api/admin/login') {
+        logout();
+        throw 0;
+      }
+      let d;
+      try {
+        d = await r.json();
+      } catch {
+        throw new Error('Old server running: stop it (Ctrl+C), run npm start, and open http://localhost:3000/admin.html');
+      }
+      if (!r.ok) throw new Error(d.error || 'Error');
+      return d;
+    }
+
+    function logout() {
+      sessionStorage.removeItem('tok');
+      tok = null;
+      login.style.display = 'block';
+      app.style.display = 'none';
+    }
+
+    function start() {
+      login.style.display = 'none';
+      app.style.display = 'block';
+      show();
+    }
+
+    go.onclick = async () => {
+      try {
+        tok = (await api('/api/admin/login', 'POST', { password: pw.value })).token;
+        sessionStorage.setItem('tok', tok);
+        start();
+      } catch (e) {
+        le.textContent = e.message;
+      }
+    };
+
+    out.onclick = logout;
+
+    document.querySelectorAll('[data-t]').forEach(b => b.onclick = () => {
+      tab = b.dataset.t;
+      document.querySelectorAll('[data-t]').forEach(x => x.classList.toggle('on', x === b));
+      show();
+    });
+
+    const show = () => ({ products: prods, comments: comms, orders: ords })[tab]();
+
+    async function prods() {
+      const l = await api('/api/products');
+      v.innerHTML = `
+        <h2>${editId ? 'Edit product' : 'Add product'}</h2>
+        <div id="f"></div>
+        <h2>Products</h2>
+        <div class="scroll">
+          <table>
+            <tr><th></th><th>Name</th><th>Price</th><th>Old</th><th>Until</th><th></th></tr>
+            ${l.map(p => `
+              <tr>
+                <td><img class="tp" src="${esc((p.images && p.images[0]) || '')}" onerror="this.style.visibility='hidden'"></td>
+                <td>${esc(p.name_en)} /${esc(p.name_fr)}</td>
+                <td>${p.price}</td>
+                <td>${p.old_price || ''}</td>
+                <td>${esc(p.until || '')}</td>
+                <td>
+                  <button class="sm" data-e="${p.id}">Edit</button>
+                  <button class="sm" data-d="${p.id}">Delete</button>
+                </td>
+              </tr>
+            `).join('')}
+          </table>
+        </div>`;
+
+      const cur = l.find(p => p.id === editId) || {};
+      imgs = [...(cur.images || [])];
+
+      f.innerHTML = `
+        <div class="row">
+          <div>Name (EN)<input id="ne" value="${esc(cur.name_en || '')}"></div>
+          <div>Name (FR)<input id="nf" value="${esc(cur.name_fr || '')}"></div>
+          <div>Description (EN)<textarea id="de" rows="3">${esc(cur.desc_en || '')}</textarea></div>
+          <div>Description (FR)<textarea id="df" rows="3">${esc(cur.desc_fr || '')}</textarea></div>
+          <div>Name (AR)<input id="na" dir="rtl" value="${esc(cur.name_ar || '')}"></div>
+          <div>Description (AR)<textarea id="da" dir="rtl" rows="3">${esc(cur.desc_ar || '')}</textarea></div>
+          <div>Price (DH)<input id="pr" type="number" min="1" value="${cur.price || ''}"></div>
+          <div>Old price (DH, optional)<input id="op" type="number" value="${cur.old_price || ''}"></div>
+          <div>Promotion until<input id="un" type="date" value="${cur.until || ''}"></div>
+          <div>Pictures (max 8)<input id="fi" type="file" accept="image/*" multiple></div>
+        </div>
+        <div class="pv" id="pv"></div>
+        <p id="fe" style="color:#c0392b"></p>
+        <div class="acts">
+          <button class="cta" id="savep" style="width:auto;padding:10px 30px;font-size:1rem">${editId ? 'Save changes' : 'Add product'}</button>
+          ${editId ? '<button class="cn" id="cn">Cancel</button>' : ''}
+        </div>`;
+
+      const pv = () => {
+        $('#pv').innerHTML = imgs.map((s, i) => `<div><img src="${esc(s)}"><b data-r="${i}">×</b></div>`).join('');
+      };
+      pv();
+
+      $('#pv').onclick = e => {
+        if (e.target.dataset.r !== undefined) {
+          imgs.splice(+e.target.dataset.r, 1);
+          pv();
+        }
+      };
+
+      $('#fi').onchange = async e => {
+        $('#fe').textContent = '';
+        for (const file of e.target.files) {
+          if (file.size > 4e6) {
+            $('#fe').textContent = 'Max 4 MB per picture';
+            continue;
+          }
+          imgs.push(await new Promise(r => {
+            const x = new FileReader();
+            x.onload = () => r(x.result);
+            x.readAsDataURL(file);
+          }));
+        }
+        pv();
+        e.target.value = '';
+      };
+
+      $('#savep').onclick = async () => {
+        try {
+          await api(
+            editId ? '/api/admin/products/' + editId : '/api/admin/products',
+            editId ? 'PUT' : 'POST',
+            {
+              name_en: ne.value,
+              name_fr: nf.value,
+              desc_en: de.value,
+              desc_fr: df.value,
+              name_ar: na.value,
+              desc_ar: da.value,
+              price: pr.value,
+              old_price: op.value,
+              until: un.value,
+              images: imgs
+            }
+          );
+          editId = null;
+          prods();
+        } catch (e) {
+          $('#fe').textContent = e.message;
+        }
+      };
+
+      if ($('#cn')) {
+        $('#cn').onclick = () => {
+          editId = null;
+          prods();
+        };
+      }
+
+      v.onclick = async e => {
+        if (e.target.dataset.e) {
+          editId = e.target.dataset.e;
+          prods();
+          scrollTo(0, 0);
+        }
+        if (e.target.dataset.d && confirm('Delete this product?')) {
+          await api('/api/admin/products/' + e.target.dataset.d, 'DELETE');
+          prods();
+        }
+      };
+    }
+
+    async function comms() {
+      const l = await api('/api/admin/comments');
+      v.innerHTML = `<h2>Comments (${l.length})</h2>` + (l.map(c => `
+        <div class="cm">
+          <b>${esc(c.author)}</b> on <i>${esc(c.product_id)}</i> <small>${new Date(c.created_at).toLocaleString()}</small>
+          <button class="sm" data-c="${c.id}" style="float:right">Delete</button>
+          <div>${esc(c.text)}</div>
+        </div>
+      `).join('') || '<p>No comments.</p>');
+
+      v.onclick = async e => {
+        if (e.target.dataset.c && confirm('Delete this comment?')) {
+          await api('/api/admin/comments/' + e.target.dataset.c, 'DELETE');
+          comms();
+        }
+      };
+    }
+
+    const waNum = p => {
+      let d = String(p || '').replace(/\D/g, '');
+      if (d.startsWith('00')) d = d.slice(2);
+      else if (d.startsWith('0')) d = '212' + d.slice(1);
+      return d.length >= 9 ? d : '';
+    };
+
+    const MSG = {
+      fr: o => `Bonjour ${o.name}, votre commande (${o.product} × ${o.qty}) a été livrée. Merci pour votre confiance ! - Filali Dates`,
+      en: o => `Hello ${o.name}, your order (${o.product} × ${o.qty}) has been delivered. Thank you for your trust! - Filali Dates`,
+      ar: o => `مرحبا ${o.name}، تم تسليم طلبك (${o.product} × ${o.qty}). شكرا على ثقتك! - تمور فيلالي`
+    };
+
+    async function ords() {
+      const l = await api('/api/admin/orders');
+
+      const head = () => {
+        const dl = l.filter(o => o.status === 'delivered').length;
+        $('#oh').textContent = `Orders (${l.length}) — Waiting ${l.length - dl} / Delivered ${dl}`;
+      };
+
+      const isValidEmail = email => String(email || '').includes('@');
+
+      const row = o => {
+        const d = o.status === 'delivered', t = new Date(o.created_at);
+        const emailValid = isValidEmail(o.email);
+
+        return `
+          <tr class="${d ? 'dn' : ''}" id="r${o.id}">
+            <td>${t.toLocaleDateString()}<br><small>${t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</small></td>
+            <td><b>${esc(o.product)}</b></td>
+            <td>${o.qty}</td>
+            <td><b>${o.total} DH</b></td>
+            <td>${esc(o.name)}</td>
+            <td>${esc(o.cin)}</td>
+            <td>${esc(o.phone)}</td>
+            <td>
+              <span class="${emailValid ? '' : 'invalid-email'}">${esc(o.email)}</span>
+              ${emailValid ? '' : '<span class="badge-err" title="Missing @ symbol">⚠️ Invalid</span>'}
+            </td>
+            <td>
+              <label><input type="radio" name="s${o.id}" value="waiting" data-o="${o.id}" ${d ? '' : 'checked'}>Waiting</label>
+              <label><input type="radio" name="s${o.id}" value="delivered" data-o="${o.id}" ${d ? 'checked' : ''}>Delivered</label>
+            </td>
+            <td><button class="del" data-x="${o.id}">🗑 Delete</button></td>
+          </tr>`;
+      };
+
+      v.innerHTML = `
+        <h2 id="oh"></h2>
+        <div class="scroll ot">
+          <table>
+            <tr><th>Date</th><th>Product</th><th>Qty</th><th>Total</th><th>Name</th><th>CIN</th><th>Phone</th><th>Email</th><th>Status</th><th></th></tr>
+            ${l.map(row).join('')}
+          </table>
+        </div>`;
+      
+      head();
+
+      v.onchange = e => {
+        const i = e.target.dataset.o;
+        if (!i) return;
+        const st = e.target.value, o = l.find(x => x.id == i);
+        let w = null;
+        if (st === 'delivered') {
+          const ph = waNum(o.phone);
+          if (ph) w = window.open(`https://wa.me/${ph}?text=${encodeURIComponent((MSG[o.lang] || MSG.fr)(o))}`, '_blank');
+          else alert('No valid phone number for this customer.');
+        }
+        api(`/api/admin/orders/${i}/status`, 'PUT', { status: st }).then(() => {
+          o.status = st;
+          e.target.closest('tr').classList.toggle('dn', st === 'delivered');
+          head();
+        }).catch(() => {
+          if (w) w.close();
+        });
+      };
+
+      v.onclick = async e => {
+        const x = e.target.dataset.x;
+        if (!x || !confirm('Delete this order permanently?')) return;
+        await api('/api/admin/orders/' + x, 'DELETE');
+        l.splice(l.findIndex(o => o.id == x), 1);
+        $('#r' + x).remove();
+        head();
+      };
+    }
+
+    if (tok) start();
+  </script>
+</body>
+</html>

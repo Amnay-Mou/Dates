@@ -1,0 +1,29 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Filali Dates</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div id="header"></div>
+    <main>
+      <div class="panel">
+        <h1 data-i="aboutTitle"></h1>
+        <p data-i="aboutText"></p>
+        <p><b data-i="owner"></b>: <span id="o"></span></p>
+        <p><b data-i="address"></b>: <span id="a"></span></p>
+      </div>
+    </main>
+    <div id="footer"></div>
+
+    <script src="app.js"></script>
+    <script>
+      window.onLang = () => {
+        o.textContent = COMPANY.owner;
+        a.textContent = COMPANY.address[lang];
+      };
+    </script>
+  </body>
+</html>
