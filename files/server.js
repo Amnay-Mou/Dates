@@ -86,4 +86,7 @@ app.put('/api/admin/orders/:id/status', auth, (req, res) => {
   db.prepare('UPDATE orders SET status=? WHERE id=?').run(st, req.params.id); res.json({ ok: true });
 });
 app.delete('/api/admin/orders/:id', auth, (req, res) => { db.prepare('DELETE FROM orders WHERE id=?').run(req.params.id); res.json({ ok: true }); });
-app.listen(3000, () => console.log('http://localhost:3000'));
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+// app.listen(3000, () => console.log('http://localhost:3000'));
