@@ -1,5 +1,9 @@
 const crypto = require('crypto'), express = require('express'), path = require('path'), fs = require('fs'), ExcelJS = require('exceljs');
-const { DatabaseSync } = require('node:sqlite');
+
+
+// const { DatabaseSync } = require('node:sqlite');
+const DatabaseSync = require('better-sqlite3');
+
 fs.mkdirSync(path.join(__dirname, 'data'), { recursive: true });
 const app = express(), db = new DatabaseSync(path.join(__dirname, 'data', 'cheese.db'));
 db.exec(`CREATE TABLE IF NOT EXISTS comments(id INTEGER PRIMARY KEY, product_id TEXT, author TEXT, text TEXT, created_at TEXT);
