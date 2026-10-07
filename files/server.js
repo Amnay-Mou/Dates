@@ -3,11 +3,11 @@ const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const ExcelJS = require('exceljs');
-const Database = require('better-sqlite3');
+const { DatabaseSync } = require('node:sqlite');
 
 fs.mkdirSync(path.join(__dirname, 'data'), { recursive: true });
 const app = express();
-const db = new Database(path.join(__dirname, 'data', 'cheese.db'));
+const db = new DatabaseSync(path.join(__dirname, 'data', 'cheese.db'));
 
 // Initialize tables
 db.exec(`
