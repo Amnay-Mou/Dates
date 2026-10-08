@@ -1,12 +1,130 @@
-<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Filali Dates</title><link rel="stylesheet" href="style.css"></head><body><div id="header"></div><main><div class="panel" style="max-width:520px;margin:auto"><div class="steps"><span class="done" data-i="s1"></span><span class="on" data-i="s2"></span><span data-i="s3"></span></div><h1 data-i="checkout"></h1><p id="sum"></p>
-<label data-i="fullName"></label><input id="nm"><label data-i="cin"></label><input id="cin"><label data-i="phone"></label><input id="ph" type="tel"><label data-i="email"></label><input id="em" type="email">
-<p class="save" data-i="trust"></p><p id="err" style="color:#c0392b"></p><button class="cta" id="ok" data-i="confirm"></button></div>
-<div class="modal" id="ty"><div><button class="x" id="cl">×</button><div class="tick">✓</div><p style="font-size:1.2rem" data-i="thanks"></p></div></div></main><div id="footer"></div><script src="app.js"></script>
-<script>
-const o=JSON.parse(sessionStorage.getItem('order')||'null');if(!o)location.href='index.html';
-window.onLang=()=>{sum.textContent=o?`\u2068${o.product}\u2069 × ${o.qty} = \u2068${dh(o.total)}\u2069`:''};
-ok.onclick=async()=>{if(!nm.value.trim()||!cin.value.trim()||!(ph.value.trim()||em.value.trim()))return err.textContent=t('need');
-ok.disabled=true;ok.style.opacity=.6;const r=await fetch('/api/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({product_id:o.id,product:o.product,qty:o.qty,total:o.total,name:nm.value,cin:cin.value,phone:ph.value,email:em.value,lang})});
-if(r.ok){sessionStorage.removeItem('order');ty.classList.add('show')}else{ok.disabled=false;ok.style.opacity=1;err.textContent=t('need')}};
-cl.onclick=()=>location.href='index.html';
-</script></body></html>
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Filali Dates</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div id="header"></div>
+    <main>
+      <div class="panel" style="max-width:520px;margin:auto">
+        <!-- Steps Breadcrumb (New UI) -->
+        <div class="steps">
+          <span class="done" data-i="s1"></span>
+          <span class="on" data-i="s2"></span>
+          <span data-i="s3"></span>
+        </div>
+
+        <h1 data-i="checkout"></h1>
+        <p id="sum"></p>
+
+        <label data-i="fullName"></label>
+        <input id="nm" />
+
+        <label data-i="cin"></label>
+        <input id="cin" />
+
+        <label data-i="phone"></label>
+        <input id="ph" type="tel" />
+
+        <!-- Email field with error message & placeholder (Old Logic) -->
+        <label data-i="email"></label>
+        <input id="em" type="email" placeholder="example@gmail.com" />
+        <p id="emErr" class="field-err"></p>
+
+        <p class="save" data-i="trust"></p>
+        <p id="err" style="color:#c0392b"></p>
+        <button class="cta" id="ok" data-i="confirm"></button>
+      </div>
+
+      <!-- Success Modal with Animated Checkmark (New UI) -->
+      <div class="modal" id="ty">
+        <div>
+          <button class="x" id="cl">×</button>
+          <div class="tick">✓</div>
+          <p style="font-size:1.2rem" data-i="thanks"></p>
+        </div>
+      </div>
+    </main>
+    <div id="footer"></div>
+
+    <script src="app.js"></script>
+    <script>
+      const o = JSON.parse(sessionStorage.getItem('order') || 'null');
+      if (!o) location.href = 'index.html';
+
+      window.onLang = () => {
+        sum.textContent = o ? `\u2068${o.product}\u2069 × ${o.qty} = \u2068${dh(o.total)}\u2069` : '';
+      };
+
+      // Email Validation Logic (From Old File)
+      const validateEmail = () => {
+        const val = em.value.trim();
+        if (val && !val.includes('@')) {
+          emErr.textContent = 'Invalid email format (missing @)';
+          emErr.style.display = 'block';
+          em.classList.add('input-err');
+          return false;
+        }
+        emErr.textContent = '';
+        emErr.style.display = 'none';
+        em.classList.remove('input-err');
+        return true;
+      };
+
+      em.oninput = validateEmail;
+
+      ok.onclick = async () => {
+        err.textContent = '';
+
+        if (!nm.value.trim() || !cin.value.trim() || !(ph.value.trim() || em.value.trim())) {
+          return (err.textContent = t('need'));
+        }
+
+        if (!validateEmail()) {
+          em.focus();
+          return;
+        }
+
+        // Button Loading State (From New File)
+        ok.disabled = true;
+        ok.style.opacity = 0.6;
+
+        try {
+          const r = await fetch('/api/orders', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              product_id: o.id,
+              product: o.product,
+              qty: o.qty,
+              total: o.total,
+              name: nm.value,
+              cin: cin.value,
+              phone: ph.value,
+              email: em.value,
+              lang
+            })
+          });
+
+          if (r.ok) {
+            sessionStorage.removeItem('order');
+            ty.classList.add('show');
+          } else {
+            ok.disabled = false;
+            ok.style.opacity = 1;
+            err.textContent = t('need');
+          }
+        } catch (e) {
+          ok.disabled = false;
+          ok.style.opacity = 1;
+          err.textContent = t('need');
+        }
+      };
+
+      cl.onclick = () => (location.href = 'index.html');
+    </script>
+  </body>
+</html>
