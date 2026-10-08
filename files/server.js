@@ -2,7 +2,6 @@ const crypto = require('crypto');
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
-const ExcelJS = require('exceljs');
 const { DatabaseSync } = require('node:sqlite');
 
 fs.mkdirSync(path.join(__dirname, 'data'), { recursive: true });
@@ -42,14 +41,31 @@ app.post('/api/orders', async (req, res) => {
     lang: ['fr','en','ar'].includes(b.lang) ? b.lang : 'fr', created_at: new Date().toISOString() 
   };
   if (!o.name || !o.cin || !(o.phone || o.email)) return res.status(400).json({ error: 'Missing fields' });
+
+  // Save to database
   db.prepare('INSERT INTO orders(product_id,product,qty,total,name,cin,phone,email,lang,created_at) VALUES(@product_id,@product,@qty,@total,@name,@cin,@phone,@email,@lang,@created_at)').run(o);
-  try {
-    const f = path.join(__dirname, 'data', 'orders.xlsx'), wb = new ExcelJS.Workbook(); let ws;
-    try { await wb.xlsx.readFile(f); ws = wb.getWorksheet('Orders'); } catch {}
-    if (!ws) { ws = wb.addWorksheet('Orders'); ws.addRow(['Date','Product','Qty','Total (DH)','Name','CIN','Phone','Email']); ws.getRow(1).font = { bold: true }; }
-    ws.addRow([o.created_at, o.product, o.qty, o.total, o.name, o.cin, o.phone, o.email]);
-    await wb.xlsx.writeFile(f);
-  } catch (e) { console.error('Excel error', e.message); }
+
+  // Send Telegram Notification
+  const telegramToken = process.env.TELEGRAM_BOT_TOKEN;
+  const chatId = process.env.TELEGRAM_CHAT_ID;
+
+  if (telegramToken && chatId) {
+    const msg = `🛍️ *NOUVELLE COMMANDE !*\n\n` +
+      `👤 *Nom:* ${o.name}\n` +
+      `🪪 *CIN:* ${o.cin}\n` +
+      `📞 *Tél:* ${o.phone}\n` +
+      `✉️ *Email:* ${o.email}\n` +
+      `🌴 *Produit:* ${o.product}\n` +
+      `📦 *Quantité:* ${o.qty}\n` +
+      `💰 *Total:* ${o.total} DH`;
+
+    fetch(`https://api.telegram.org/bot${telegramToken}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, text: msg, parse_mode: 'Markdown' })
+    }).catch(err => console.error('Telegram notification error:', err));
+  }
+
   res.json({ ok: true });
 });
 
