@@ -4,126 +4,80 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Filali Dates</title>
-    <link rel="icon" type="image/png" href="images/logo.png"><link rel="apple-touch-icon" href="images/logo.png"><link rel="stylesheet" href="style.css" />
+    <link rel="icon" type="image/png" href="images/logo.png"><link rel="apple-touch-icon" href="images/logo.png">
+    <link rel="stylesheet" href="style.css" />
   </head>
   <body>
     <div id="header"></div>
     <main>
       <div class="panel" style="max-width:520px;margin:auto">
-        <!-- Steps Breadcrumb (New UI) -->
-        <div class="steps">
-          <span class="done" data-i="s1"></span>
-          <span class="on" data-i="s2"></span>
-          <span data-i="s3"></span>
-        </div>
-
+        <div class="steps"><span class="done" data-i="s1"></span><span class="on" data-i="s2"></span><span data-i="s3"></span></div>
         <h1 data-i="checkout"></h1>
         <p id="sum"></p>
-
         <label data-i="fullName"></label>
-        <input id="nm" />
-
+        <input id="nm" autocomplete="name" />
         <label data-i="cin"></label>
         <input id="cin" />
-
         <label data-i="phone"></label>
-        <input id="ph" type="tel" />
-
-        <!-- Email field with error message & placeholder (Old Logic) -->
+        <input id="ph" type="tel" inputmode="numeric" maxlength="10" placeholder="0680719510" autocomplete="tel" />
+        <p id="phErr" class="field-err"></p>
         <label data-i="email"></label>
-        <input id="em" type="email" placeholder="example@gmail.com" />
+        <input id="em" type="email" placeholder="example@gmail.com" autocomplete="email" />
         <p id="emErr" class="field-err"></p>
-
         <p class="save" data-i="trust"></p>
         <p id="err" style="color:#c0392b"></p>
         <button class="cta" id="ok" data-i="confirm"></button>
       </div>
-
-      <!-- Success Modal with Animated Checkmark (New UI) -->
       <div class="modal" id="ty">
         <div>
           <button class="x" id="cl">×</button>
           <div class="tick">✓</div>
+          <p id="refEl" class="refno"></p>
+          <p id="cuEl" class="cuno"></p>
           <p style="font-size:1.2rem" data-i="thanks"></p>
         </div>
       </div>
     </main>
     <div id="footer"></div>
-
     <script src="app.js"></script>
     <script>
       const o = JSON.parse(sessionStorage.getItem('order') || 'null');
       if (!o) location.href = 'index.html';
+      window.onLang = () => { sum.textContent = o ? `\u2068${o.product}\u2069 × ${o.qty} = \u2068${dh(o.total)}\u2069` : ''; };
 
-      window.onLang = () => {
-        sum.textContent = o ? `\u2068${o.product}\u2069 × ${o.qty} = \u2068${dh(o.total)}\u2069` : '';
-      };
-
-      // Email Validation Logic (From Old File)
-      const validateEmail = () => {
-        const val = em.value.trim();
-        if (val && !val.includes('@')) {
-          emErr.textContent = 'Invalid email format (missing @)';
-          emErr.style.display = 'block';
-          em.classList.add('input-err');
-          return false;
-        }
-        emErr.textContent = '';
-        emErr.style.display = 'none';
-        em.classList.remove('input-err');
-        return true;
-      };
-
-      em.oninput = validateEmail;
+      const mark = (el, box, msg) => { box.textContent = msg; el.classList.toggle('input-err', !!msg); return !msg; };
+      const vPhone = () => mark(ph, phErr, /^0\d{9}$/.test(ph.value) ? '' : t('badPhone'));
+      const vEmail = () => { const v = em.value.trim(); return mark(em, emErr, !v || /^\S+@\S+\.\S+$/.test(v) ? '' : t('badEmail')); };
+      ph.oninput = () => { ph.value = ph.value.replace(/\D/g, '').slice(0, 10); if (phErr.textContent) vPhone(); };
+      em.oninput = () => { if (emErr.textContent) vEmail(); };
 
       ok.onclick = async () => {
         err.textContent = '';
-
-        if (!nm.value.trim() || !cin.value.trim() || !(ph.value.trim() || em.value.trim())) {
-          return (err.textContent = t('need'));
-        }
-
-        if (!validateEmail()) {
-          em.focus();
-          return;
-        }
-
-        // Button Loading State (From New File)
-        ok.disabled = true;
-        ok.style.opacity = 0.6;
-
+        if (!nm.value.trim() || !cin.value.trim()) { err.textContent = t('need'); return; }
+        const p = vPhone(), m = vEmail();
+        if (!p) { ph.focus(); return; }
+        if (!m) { em.focus(); return; }
+        ok.disabled = true; ok.style.opacity = 0.6;
         try {
           const r = await fetch('/api/orders', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              product_id: o.id,
-              product: o.product,
-              qty: o.qty,
-              total: o.total,
-              name: nm.value,
-              cin: cin.value,
-              phone: ph.value,
-              email: em.value,
-              lang
-            })
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ product_id: o.id, product: o.product, qty: o.qty, total: o.total, name: nm.value, cin: cin.value, phone: ph.value, email: em.value, lang, customer_id: cid() })
           });
-
-          if (r.ok) {
-            sessionStorage.removeItem('order');
-            ty.classList.add('show');
-          } else {
-            ok.disabled = false;
-            ok.style.opacity = 1;
-            err.textContent = t('need');
-          }
-        } catch (e) {
-          ok.disabled = false;
-          ok.style.opacity = 1;
-          err.textContent = t('need');
+          if (!r.ok) throw 0;
+          const d = await r.json();
+          sessionStorage.removeItem('order');
+          refEl.textContent = `${t('orderNo')} ${d.ref || ''}`;
+          cuEl.textContent = `${t('custNo')} ${cid()}`;
+          ty.classList.add('show');
+        } catch {
+          ok.disabled = false; ok.style.opacity = 1; err.textContent = t('fail');
         }
       };
 
+      // Enter key = Confirm order
+      document.addEventListener('keydown', e => {
+        if (e.key === 'Enter' && !e.isComposing && !['BUTTON', 'A'].includes(e.target.tagName)) { e.preventDefault(); ok.click(); }
+      });
       cl.onclick = () => (location.href = 'index.html');
     </script>
   </body>

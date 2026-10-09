@@ -46,6 +46,9 @@ Object.assign(I18N.fr, { limited: '🌴 Quantité limitée : petits lots' }); Ob
 Object.assign(I18N.fr, { s1: 'Produit', s2: 'Vos informations', s3: 'Confirmation', buy: "Voir l'offre →", trust: '🔒 Aucun paiement en ligne maintenant. Nous vous contactons pour confirmer votre commande.' });
 Object.assign(I18N.en, { s1: 'Product', s2: 'Your details', s3: 'Confirmation', buy: 'See offer →', trust: '🔒 No online payment now. We will contact you to confirm your order.' });
 Object.assign(I18N.ar, { s1: 'المنتج', s2: 'معلوماتك', s3: 'التأكيد', buy: 'شاهد العرض ←', trust: '🔒 لا يوجد دفع إلكتروني الآن. سنتصل بك لتأكيد طلبك.' });
+Object.assign(I18N.fr, { wTag: 'Palmeraies du Tafilalet · Maroc', badEmail: 'Adresse email invalide (ex. nom@gmail.com)', badPhone: 'Numéro invalide : 10 chiffres, ex. 0680719510', orderNo: 'Commande N°', custNo: 'Votre ID client :', fail: 'Une erreur est survenue. Réessayez ou contactez-nous sur WhatsApp.', ref: 'Réf.' });
+Object.assign(I18N.en, { wTag: 'Tafilalet palm groves · Morocco', badEmail: 'Invalid email address (e.g. name@gmail.com)', badPhone: 'Invalid number: 10 digits, e.g. 0680719510', orderNo: 'Order No.', custNo: 'Your customer ID:', fail: 'Something went wrong. Please try again or contact us on WhatsApp.', ref: 'Ref.' });
+Object.assign(I18N.ar, { wTag: 'واحات تافيلالت · المغرب', badEmail: 'بريد إلكتروني غير صالح (مثال: name@gmail.com)', badPhone: 'رقم غير صالح: 10 أرقام، مثال 0680719510', orderNo: 'رقم الطلب', custNo: 'رقم العميل:', fail: 'حدث خطأ. حاول مرة أخرى أو تواصل معنا عبر واتساب.', ref: 'المرجع' });
 let lang = localStorage.getItem('lang'); if (!I18N[lang]) lang = 'fr';
 const t = (k) => I18N[lang][k] || k, $ = (s) => document.querySelector(s);
 const dh = (n) => lang === 'ar' ? `${n} درهم` : `${n} DH`;
@@ -54,11 +57,11 @@ function layout() {
   $('#header').innerHTML = `<a class="brand" href="index.html"><img src="images/logo.png" alt="" onerror="this.style.visibility='hidden'"><span>${COMPANY.name}</span></a>
   <nav><a href="index.html" data-i="home"></a><button id="cBtn" data-i="contact"></button><a href="about.html" data-i="about"></a>
   <button class="lang" data-l="fr">Fr</button><button class="lang" data-l="en">Eng</button><button class="lang" data-l="ar">عربي</button></nav>`;
-  $('#footer').innerHTML = `<div>📞 ${COMPANY.phone}<br>✉️ ${COMPANY.email}</div><div class="c" id="addr"></div>
+  $('#footer').innerHTML = `<div>📞 <bdi dir="ltr">${COMPANY.phone}</bdi><br>✉️ <bdi dir="ltr">${COMPANY.email}</bdi></div><div class="c" id="addr"></div>
   <div class="r"><img src="images/logo.png" alt="" onerror="this.style.visibility='hidden'"><strong>${COMPANY.name}</strong></div>
   <div class="soc">${Object.entries(COMPANY.social).map(([n, u]) => `<a href="${u}" target="_blank" rel="noopener">${n}</a>`).join('')}</div>`;
   document.body.insertAdjacentHTML('beforeend', `<div class="modal" id="cModal"><div><button class="x" onclick="this.closest('.modal').classList.remove('show')">×</button>
-  <h3 data-i="contact"></h3><p>📞 ${COMPANY.phone}</p><p>✉️ ${COMPANY.email}</p></div></div>`);
+  <h3 data-i="contact"></h3><p>📞 <bdi dir="ltr">${COMPANY.phone}</bdi></p><p>✉️ <bdi dir="ltr">${COMPANY.email}</bdi></p></div></div>`);
   $('#cBtn').onclick = () => $('#cModal').classList.add('show');
   document.title = COMPANY.name;
   document.body.insertAdjacentHTML('beforeend', `<a class="wa-float" href="https://wa.me/${COMPANY.wa}" target="_blank" rel="noopener" aria-label="WhatsApp">💬</a>`);
@@ -79,3 +82,6 @@ const unit = (p) => isPromo(p) ? p.price : (p.old || p.price);
 document.addEventListener('DOMContentLoaded', () => ready.then(layout));
 window.addEventListener('scroll', () => { const h = $('#header'); if (h) { if (scrollY > 60) h.classList.add('small'); else if (scrollY < 20) h.classList.remove('small'); }; });
 const pct = (p) => isPromo(p) ? Math.round((1 - p.price / p.old) * 100) : 0;
+
+// anonymous customer ID: same ID on this browser's comments and orders
+const cid = () => { let c = localStorage.getItem('cid'); if (!c) { c = 'C-' + Math.random().toString(36).slice(2, 8).toUpperCase(); localStorage.setItem('cid', c); } return c; };

@@ -1,9 +1,9 @@
 <!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Filali Dates</title><link rel="icon" type="image/png" href="images/logo.png"><link rel="apple-touch-icon" href="images/logo.png"><link rel="stylesheet" href="style.css"><link rel="expect" href="#pready" blocking="render"></head><body><div id="header"></div><main><div class="panel detail"><div><img class="main-img" id="big" alt=""><div class="thumbs" id="th"></div></div>
-<div><h1 id="nm"></h1><p id="ds"></p><div class="pbox" id="pb"><div class="price"><span id="pr"></span><span id="pm"></span></div><p class="save" id="sv"></p><p class="save" id="cd"></p><p class="lq" id="lq"></p></div>
+<div><h1 id="nm"></h1><p class="refline" id="rf"></p><p id="ds"></p><div class="pbox" id="pb"><div class="price"><span id="pr"></span><span id="pm"></span></div><p class="save" id="sv"></p><p class="save" id="cd"></p><p class="lq" id="lq"></p></div>
 <p data-i="qty" style="margin-bottom:0;font-size:1.15rem"></p><div class="qty"><button id="mn">−</button><span id="q">1</span><button id="pl">+</button></div>
 <div class="trust" id="tr"></div><button class="cta" id="add"></button><a class="wa-btn" id="wb" target="_blank" rel="noopener" data-i="wa"></a></div></div>
 <div class="panel"><h2 data-i="comments"></h2><input id="au" data-ph="yourName" maxlength="50"><textarea id="tx" data-ph="yourComment" rows="3" maxlength="500"></textarea>
-<button class="cta" id="snd" style="width:auto;padding:10px 28px;font-size:1rem" data-i="send"></button><div id="cl"></div></div></main><div id="footer"></div><script src="app.js"></script>
+<p class="refline" id="cu"></p><button class="cta" id="snd" style="width:auto;padding:10px 28px;font-size:1rem" data-i="send"></button><div id="cl"></div></div></main><div id="footer"></div><script src="app.js"></script>
 <script>
 ready.then(()=>{
 const p=PRODUCTS.find(x=>x.id===new URLSearchParams(location.search).get('id'))||PRODUCTS[0];let n=1;big.style.viewTransitionName='pimg-'+p.id;
@@ -17,12 +17,13 @@ tr.innerHTML=`<span>${t('b1')}</span><span>${t('b2')}</span><span>${t('b3')}</sp
 add.textContent=`${t('add')} — \u2068${dh(unit(p)*n)}\u2069`};
 mn.onclick=()=>{n=Math.max(1,n-1);upd()};pl.onclick=()=>{n=Math.min(5,n+1);upd()};
 add.onclick=()=>{sessionStorage.setItem('order',JSON.stringify({id:p.id,product:p.name[lang],qty:n,total:unit(p)*n}));location.href='checkout.html'};
+document.addEventListener('keydown',e=>{if(e.key!=='Enter'||e.isComposing)return;const tg=e.target.tagName;if(e.target.id==='au'){e.preventDefault();tx.focus();return}if(['INPUT','TEXTAREA','BUTTON','A'].includes(tg))return;e.preventDefault();add.click()});
 async function load(){const r=await(await fetch('/api/comments/'+p.id)).json();
 cl.innerHTML=r.length?r.map(c=>`<div class="cm"><b>${esc(c.author)}</b> <small>${new Date(c.created_at).toLocaleString()}</small><div>${esc(c.text)}</div></div>`).join(''):`<p>${t('empty')}</p>`}
 const esc=s=>s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 snd.onclick=async()=>{if(!au.value.trim()||!tx.value.trim())return;
-await fetch('/api/comments',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({product_id:p.id,author:au.value,text:tx.value})});tx.value='';load()};
-window.onLang=()=>{nm.textContent=p.name[lang];ds.textContent=p.desc[lang];pr.textContent=dh(unit(p));pm.innerHTML=isPromo(p)?promoText(p):'';pb.classList.toggle('hot',isPromo(p));lq.textContent=t('limited');upd();load()}
+await fetch('/api/comments',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({product_id:p.id,author:au.value,text:tx.value,customer_id:cid()})});tx.value='';load()};
+window.onLang=()=>{rf.textContent=t('ref')+': '+p.id.toUpperCase();cu.textContent=t('custNo')+' '+cid();nm.textContent=p.name[lang];ds.textContent=p.desc[lang];pr.textContent=dh(unit(p));pm.innerHTML=isPromo(p)?promoText(p):'';pb.classList.toggle('hot',isPromo(p));lq.textContent=t('limited');upd();load()}
 document.body.insertAdjacentHTML('beforeend','<i id="pready"></i>');
 });
 </script></body></html>

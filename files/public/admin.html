@@ -151,6 +151,7 @@
       background: #c0392b;
       color: #fff;
     }
+.invalid-email{color:#c0392b}.badge-err{color:#c0392b;font-size:.75rem;font-weight:bold}code{background:#f1e6c8;padding:1px 6px;border-radius:5px;font-size:.8rem}
   </style>
 </head>
 <body>
@@ -229,6 +230,7 @@
     };
 
     out.onclick = logout;
+    pw.onkeydown = e => { if (e.key === 'Enter') go.click(); };
 
     document.querySelectorAll('[data-t]').forEach(b => b.onclick = () => {
       tab = b.dataset.t;
@@ -238,6 +240,18 @@
 
     const show = () => ({ products: prods, comments: comms, orders: ords })[tab]();
 
+    const shrink = file => new Promise((res, rej) => {
+      const im = new Image(), u = URL.createObjectURL(file);
+      im.onload = () => {
+        const k = Math.min(1, 1400 / Math.max(im.width, im.height)), c = document.createElement('canvas');
+        c.width = Math.round(im.width * k); c.height = Math.round(im.height * k);
+        c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+        URL.revokeObjectURL(u); res(c.toDataURL('image/jpeg', 0.82));
+      };
+      im.onerror = () => rej(new Error('Bad image'));
+      im.src = u;
+    });
+
     async function prods() {
       const l = await api('/api/products');
       v.innerHTML = `
@@ -246,11 +260,12 @@
         <h2>Products</h2>
         <div class="scroll">
           <table>
-            <tr><th></th><th>Name</th><th>Price</th><th>Old</th><th>Until</th><th></th></tr>
+            <tr><th></th><th>ID</th><th>Name</th><th>Price</th><th>Old</th><th>Until</th><th></th></tr>
             ${l.map(p => `
               <tr>
                 <td><img class="tp" src="${esc((p.images && p.images[0]) || '')}" onerror="this.style.visibility='hidden'"></td>
-                <td>${esc(p.name_en)} /${esc(p.name_fr)}</td>
+                <td><code>${esc(p.id)}</code></td>
+                <td>${esc(p.name_en)} / ${esc(p.name_fr)}</td>
                 <td>${p.price}</td>
                 <td>${p.old_price || ''}</td>
                 <td>${esc(p.until || '')}</td>
@@ -301,15 +316,11 @@
       $('#fi').onchange = async e => {
         $('#fe').textContent = '';
         for (const file of e.target.files) {
-          if (file.size > 4e6) {
-            $('#fe').textContent = 'Max 4 MB per picture';
+          if (file.size > 15e6) {
+            $('#fe').textContent = 'Max 15 MB per picture';
             continue;
           }
-          imgs.push(await new Promise(r => {
-            const x = new FileReader();
-            x.onload = () => r(x.result);
-            x.readAsDataURL(file);
-          }));
+          imgs.push(await shrink(file));
         }
         pv();
         e.target.value = '';
@@ -362,9 +373,11 @@
 
     async function comms() {
       const l = await api('/api/admin/comments');
+      const os = await api('/api/admin/orders'), by = {};
+      os.forEach(o => { if (o.customer_id) (by[o.customer_id] = by[o.customer_id] || []).push(ref(o.id)); });
       v.innerHTML = `<h2>Comments (${l.length})</h2>` + (l.map(c => `
         <div class="cm">
-          <b>${esc(c.author)}</b> on <i>${esc(c.product_id)}</i> <small>${new Date(c.created_at).toLocaleString()}</small>
+          <b>${esc(c.author)}</b> on <i>${esc(c.product_id)}</i> · <code>${esc(c.customer_id || '—')}</code>${by[c.customer_id] ? ' 🛒 ' + by[c.customer_id].join(', ') : ''} <small>${new Date(c.created_at).toLocaleString()}</small>
           <button class="sm" data-c="${c.id}" style="float:right">Delete</button>
           <div>${esc(c.text)}</div>
         </div>
@@ -378,6 +391,8 @@
       };
     }
 
+    const ref = id => 'FD-' + String(id).padStart(4, '0');
+
     const waNum = p => {
       let d = String(p || '').replace(/\D/g, '');
       if (d.startsWith('00')) d = d.slice(2);
@@ -386,9 +401,9 @@
     };
 
     const MSG = {
-      fr: o => `Bonjour ${o.name}, votre commande (${o.product} × ${o.qty}) a été livrée. Merci pour votre confiance ! - Filali Dates`,
-      en: o => `Hello ${o.name}, your order (${o.product} × ${o.qty}) has been delivered. Thank you for your trust! - Filali Dates`,
-      ar: o => `مرحبا ${o.name}، تم تسليم طلبك (${o.product} × ${o.qty}). شكرا على ثقتك! - تمور فيلالي`
+      fr: o => `Bonjour ${o.name}, votre commande ${ref(o.id)} (${o.product} × ${o.qty}) a été livrée. Merci pour votre confiance ! - Filali Dates`,
+      en: o => `Hello ${o.name}, your order ${ref(o.id)} (${o.product} × ${o.qty}) has been delivered. Thank you for your trust! - Filali Dates`,
+      ar: o => `مرحبا ${o.name}، تم تسليم طلبك ${ref(o.id)} (${o.product} × ${o.qty}). شكرا على ثقتك! - تمور فيلالي`
     };
 
     async function ords() {
@@ -399,7 +414,7 @@
         $('#oh').textContent = `Orders (${l.length}) — Waiting ${l.length - dl} / Delivered ${dl}`;
       };
 
-      const isValidEmail = email => String(email || '').includes('@');
+      const isValidEmail = email => !email || /^\S+@\S+\.\S+$/.test(String(email));
 
       const row = o => {
         const d = o.status === 'delivered', t = new Date(o.created_at);
@@ -407,6 +422,8 @@
 
         return `
           <tr class="${d ? 'dn' : ''}" id="r${o.id}">
+            <td><b>${ref(o.id)}</b></td>
+            <td><code>${esc(o.customer_id || '—')}</code></td>
             <td>${t.toLocaleDateString()}<br><small>${t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</small></td>
             <td><b>${esc(o.product)}</b></td>
             <td>${o.qty}</td>
@@ -430,7 +447,7 @@
         <h2 id="oh"></h2>
         <div class="scroll ot">
           <table>
-            <tr><th>Date</th><th>Product</th><th>Qty</th><th>Total</th><th>Name</th><th>CIN</th><th>Phone</th><th>Email</th><th>Status</th><th></th></tr>
+            <tr><th>Order</th><th>Customer</th><th>Date</th><th>Product</th><th>Qty</th><th>Total</th><th>Name</th><th>CIN</th><th>Phone</th><th>Email</th><th>Status</th><th></th></tr>
             ${l.map(row).join('')}
           </table>
         </div>`;

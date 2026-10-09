@@ -5,6 +5,9 @@ const fs = require('fs');
 const { createClient } = require('@libsql/client');
 
 const app = express();
+process.on('unhandledRejection', e => console.error('Unhandled:', e));
+// every async route is protected: a DB error returns 500 instead of crashing the server
+['get', 'post', 'put', 'delete'].forEach(m => { const o = app[m].bind(app); app[m] = (p, ...h) => o(p, ...h.map(f => f.constructor.name === 'AsyncFunction' ? (q, s, n) => f(q, s, n).catch(e => { console.error(e); if (!s.headersSent) s.status(500).json({ error: 'Server error' }); }) : f)); });
 
 // Initialize Turso Cloud Client (Falls back to local file if env vars are missing)
 const db = createClient({
@@ -18,6 +21,8 @@ async function initDb() {
   await db.execute(`CREATE TABLE IF NOT EXISTS orders(id INTEGER PRIMARY KEY AUTOINCREMENT, product_id TEXT, product TEXT, qty INTEGER, total REAL, name TEXT, cin TEXT, phone TEXT, email TEXT, status TEXT DEFAULT 'waiting', lang TEXT, created_at TEXT);`);
   await db.execute(`CREATE TABLE IF NOT EXISTS products(id TEXT PRIMARY KEY, name_fr TEXT, name_en TEXT, desc_fr TEXT, desc_en TEXT, price REAL, old_price REAL, until TEXT, images TEXT, name_ar TEXT, desc_ar TEXT);`);
 
+  await db.execute(`CREATE TABLE IF NOT EXISTS images(id TEXT PRIMARY KEY, mime TEXT, data TEXT);`);
+  for (const q of ['ALTER TABLE comments ADD COLUMN customer_id TEXT', 'ALTER TABLE orders ADD COLUMN customer_id TEXT']) { try { await db.execute(q); } catch {} }
   // Seed initial products if empty
   const prodCheck = await db.execute('SELECT COUNT(*) as count FROM products');
   if (Number(prodCheck.rows[0].count) === 0) {
@@ -42,6 +47,7 @@ app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'welcome.
 app.use(express.static(path.join(__dirname, 'public')));
 
 const clean = (s, n = 300) => String(s || '').trim().slice(0, n);
+const custId = v => /^C-[A-Z0-9]{4,10}$/.test(String(v)) ? String(v) : null;
 
 // Helper for Telegram messages
 async function sendTelegram(msg) {
@@ -51,7 +57,7 @@ async function sendTelegram(msg) {
   fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chat_id: chatId, text: msg, parse_mode: 'Markdown' })
+    body: JSON.stringify({ chat_id: chatId, text: msg })
   }).catch(err => console.error('Telegram error:', err));
 }
 
@@ -64,16 +70,16 @@ app.get('/api/comments/:pid', async (req, res) => {
 });
 
 app.post('/api/comments', async (req, res) => {
-  const { product_id, author, text } = req.body, a = clean(author, 50), t = clean(text, 500);
+  const { product_id, author, text } = req.body, a = clean(author, 50), t = clean(text, 500), cust = custId(req.body.customer_id);
   if (!product_id || !a || !t) return res.status(400).json({ error: 'Missing fields' });
   const created_at = new Date().toISOString();
 
   await db.execute({
-    sql: 'INSERT INTO comments(product_id,author,text,created_at) VALUES(?,?,?,?)',
-    args: [product_id, a, t, created_at]
+    sql: 'INSERT INTO comments(product_id,author,text,created_at,customer_id) VALUES(?,?,?,?,?)',
+    args: [product_id, a, t, created_at, cust]
   });
 
-  sendTelegram(`💬 *NOUVEAU COMMENTAIRE !*\n\n🌴 *Produit ID:* ${product_id}\n👤 *Auteur:* ${a}\n📝 *Message:* ${t}`);
+  sendTelegram(`💬 NOUVEAU COMMENTAIRE\n\n🌴 Produit: ${product_id}\n👤 Auteur: ${a}\n🆔 Client: ${cust || '-'}\n📝 Message: ${t}`);
   res.json({ author: a, text: t, created_at });
 });
 
@@ -83,17 +89,20 @@ app.post('/api/orders', async (req, res) => {
   const o = { 
     product_id: clean(b.product_id, 30), product: clean(b.product, 100), qty, total: Number(b.total) || 0,
     name: clean(b.name, 100), cin: clean(b.cin, 30), phone: clean(b.phone, 30), email: clean(b.email, 100), 
-    lang: ['fr','en','ar'].includes(b.lang) ? b.lang : 'fr', created_at: new Date().toISOString() 
+    lang: ['fr','en','ar'].includes(b.lang) ? b.lang : 'fr', customer_id: custId(b.customer_id), created_at: new Date().toISOString() 
   };
-  if (!o.name || !o.cin || !(o.phone || o.email)) return res.status(400).json({ error: 'Missing fields' });
+  if (!o.name || !o.cin) return res.status(400).json({ error: 'Missing fields' });
+  if (!/^0\d{9}$/.test(o.phone)) return res.status(400).json({ error: 'Bad phone' });
+  if (o.email && !/^\S+@\S+\.\S+$/.test(o.email)) return res.status(400).json({ error: 'Bad email' });
 
-  await db.execute({
-    sql: 'INSERT INTO orders(product_id,product,qty,total,name,cin,phone,email,lang,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)',
-    args: [o.product_id, o.product, o.qty, o.total, o.name, o.cin, o.phone, o.email, o.lang, o.created_at]
+  const ins = await db.execute({
+    sql: 'INSERT INTO orders(product_id,product,qty,total,name,cin,phone,email,lang,created_at,customer_id) VALUES(?,?,?,?,?,?,?,?,?,?,?)',
+    args: [o.product_id, o.product, o.qty, o.total, o.name, o.cin, o.phone, o.email, o.lang, o.created_at, o.customer_id]
   });
 
-  sendTelegram(`🛍️ *NOUVELLE COMMANDE !*\n\n👤 *Nom:* ${o.name}\n🪪 *CIN:* ${o.cin}\n📞 *Tél:* ${o.phone}\n✉️ *Email:* ${o.email}\n🌴 *Produit:* ${o.product}\n📦 *Quantité:* ${o.qty}\n💰 *Total:* ${o.total} DH`);
-  res.json({ ok: true });
+  const ref = 'FD-' + String(Number(ins.lastInsertRowid)).padStart(4, '0');
+  sendTelegram(`🛍️ NOUVELLE COMMANDE ${ref}\n\n🆔 Client: ${o.customer_id || '-'}\n👤 Nom: ${o.name}\n🪪 CIN: ${o.cin}\n📞 Tél: ${o.phone}\n✉️ Email: ${o.email || '-'}\n🌴 Produit: ${o.product}\n📦 Quantité: ${o.qty}\n💰 Total: ${o.total} DH`);
+  res.json({ ok: true, ref });
 });
 
 // ===== ADMIN & PRODUCTS =====
@@ -103,16 +112,24 @@ const tokens = new Set(), UP = path.join(__dirname, 'public', 'uploads'); fs.mkd
 const out = r => ({ ...r, images: JSON.parse(r.images || '[]') });
 const auth = (req, res, next) => tokens.has(req.get('x-token')) ? next() : res.status(401).json({ error: 'Unauthorized' });
 
-function saveImgs(list) {
-  return (Array.isArray(list) ? list : []).slice(0, 8).map(s => {
+async function saveImgs(list) {
+  const keep = [];
+  for (const s of (Array.isArray(list) ? list : []).slice(0, 8)) {
     const m = /^data:image\/(png|jpeg|webp|gif);base64,(.+)$/.exec(s);
-    if (m) { const f = crypto.randomBytes(8).toString('hex') + '.' + (m[1] === 'jpeg' ? 'jpg' : m[1]); fs.writeFileSync(path.join(UP, f), Buffer.from(m[2], 'base64')); return '/uploads/' + f; }
-    return /^(images\/|\/uploads\/)[\w.\-]+$/.test(s) ? s : null;
-  }).filter(Boolean);
+    if (m) { const id = crypto.randomBytes(10).toString('hex'); await db.execute({ sql: 'INSERT INTO images(id,mime,data) VALUES(?,?,?)', args: [id, 'image/' + m[1], m[2]] }); keep.push('/img/' + id); }
+    else if (/^(images\/[\w.\-]+|\/uploads\/[\w.\-]+|\/img\/[a-f0-9]+)$/.test(s)) keep.push(s);
+  }
+  return keep;
 }
 
-const pvals = b => [clean(b.name_fr, 100), clean(b.name_en, 100), clean(b.desc_fr, 800), clean(b.desc_en, 800), Number(b.price) || 0, Number(b.old_price) || null, clean(b.until, 10) || null, JSON.stringify(saveImgs(b.images)), clean(b.name_ar, 100), clean(b.desc_ar, 800)];
+const pvals = async b => [clean(b.name_fr, 100), clean(b.name_en, 100), clean(b.desc_fr, 800), clean(b.desc_en, 800), Number(b.price) || 0, Number(b.old_price) || null, clean(b.until, 10) || null, JSON.stringify(await saveImgs(b.images)), clean(b.name_ar, 100), clean(b.desc_ar, 800)];
 
+app.get('/img/:id', async (req, res) => {
+  const rs = await db.execute({ sql: 'SELECT mime,data FROM images WHERE id=?', args: [req.params.id] });
+  if (!rs.rows.length) return res.status(404).end();
+  res.set({ 'Content-Type': rs.rows[0].mime, 'Cache-Control': 'public, max-age=31536000, immutable' });
+  res.send(Buffer.from(rs.rows[0].data, 'base64'));
+});
 app.get('/api/products', async (req, res) => {
   const rs = await db.execute('SELECT * FROM products');
   res.json(rs.rows.map(out));
@@ -124,7 +141,7 @@ app.post('/api/admin/login', (req, res) => {
 });
 
 app.post('/api/admin/products', auth, async (req, res) => {
-  const v = pvals(req.body); if (!v[0] || !v[1] || v[4] <= 0) return res.status(400).json({ error: 'Name and price required' });
+  const v = await pvals(req.body); if (!v[0] || !v[1] || v[4] <= 0) return res.status(400).json({ error: 'Name and price required' });
   const id = v[1].toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'p' + Date.now();
   try { 
     await db.execute({ sql: 'INSERT INTO products(id,name_fr,name_en,desc_fr,desc_en,price,old_price,until,images,name_ar,desc_ar) VALUES(?,?,?,?,?,?,?,?,?,?,?)', args: [id, ...v] }); 
@@ -133,7 +150,7 @@ app.post('/api/admin/products', auth, async (req, res) => {
 });
 
 app.put('/api/admin/products/:id', auth, async (req, res) => {
-  const v = pvals(req.body); if (!v[0] || !v[1] || v[4] <= 0) return res.status(400).json({ error: 'Name and price required' });
+  const v = await pvals(req.body); if (!v[0] || !v[1] || v[4] <= 0) return res.status(400).json({ error: 'Name and price required' });
   await db.execute({ sql: 'UPDATE products SET name_fr=?,name_en=?,desc_fr=?,desc_en=?,price=?,old_price=?,until=?,images=?,name_ar=?,desc_ar=? WHERE id=?', args: [...v, req.params.id] });
   res.json({ ok: true });
 });

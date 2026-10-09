@@ -4,39 +4,32 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Filali Dates</title>
+    <link rel="icon" type="image/png" href="images/logo.png"><link rel="apple-touch-icon" href="images/logo.png">
     <link rel="stylesheet" href="style.css" />
   </head>
-  <body>
+  <body class="is-welcome">
     <div id="header"></div>
     <main>
-      <section class="panel hero welcome">
-        <img class="wlogo" src="images/logo.png" alt="" onerror="this.style.display='none'" />
-        <h1 data-i="wTitle"></h1>
-        <p class="lead" data-i="wLead"></p>
-
-        <div class="promises">
-          <div>
-            <span>🌱</span>
-            <h3 data-i="w1t"></h3>
-            <p data-i="w1"></p>
-          </div>
-          <div>
-            <span>🤝</span>
-            <h3 data-i="w2t"></h3>
-            <p data-i="w2"></p>
-          </div>
-          <div>
-            <span>✨</span>
-            <h3 data-i="w3t"></h3>
-            <p data-i="w3"></p>
-          </div>
+      <section class="wv">
+        <div class="wv-logo" style="--d:0"><img src="images/logo.png" alt="Filali Dates" onerror="this.style.display='none'" /></div>
+        <p class="wv-eyebrow" style="--d:1" data-i="wTag"></p>
+        <h1 class="wv-title" data-i="wTitle"></h1>
+        <p class="wv-lead" style="--d:3" data-i="wLead"></p>
+        <div class="wv-cards" style="--d:4">
+          <div class="wv-card"><i>🌱</i><h3 data-i="w1t"></h3><p data-i="w1"></p></div>
+          <div class="wv-card"><i>🤝</i><h3 data-i="w2t"></h3><p data-i="w2"></p></div>
+          <div class="wv-card"><i>✨</i><h3 data-i="w3t"></h3><p data-i="w3"></p></div>
         </div>
-
-        <a class="cta" href="index.html" data-i="shop" style="display:inline-block;width:auto;padding:16px 46px;text-decoration:none"></a>
+        <a class="wv-btn" id="shopBtn" href="index.html" style="--d:5"><span data-i="shop"></span><i class="arr">→</i></a>
       </section>
     </main>
     <div id="footer"></div>
-
     <script src="app.js"></script>
+    <script>
+      // Enter key = Shop our dates
+      document.addEventListener('keydown', e => {
+        if (e.key === 'Enter' && !e.isComposing && !['A', 'BUTTON', 'INPUT', 'TEXTAREA'].includes(e.target.tagName)) shopBtn.click();
+      });
+    </script>
   </body>
 </html>
