@@ -157,6 +157,8 @@
     .st-waiting{background:#fff3cd}.st-ready{background:#dbeafe}.st-delivering{background:#ffe5b4}.st-delivered{background:#d9efdc}
     .tc{background:#fff;border:1px solid #e5d3a5;border-radius:14px;padding:18px}.tc h3{margin:0 0 10px}.tc label{display:block;font-size:.85rem;color:#5c3418}
     .dg{padding:6px 10px;border-radius:8px;margin:4px 0;font-size:.88rem}.dg.ok{background:#e3f4e6}.dg.bad{background:#fdecea}
+    .tgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;margin-bottom:22px}.tc.off{opacity:.6}.tsec{display:flex;justify-content:space-between;align-items:center;gap:10px}
+    .chk{display:flex;align-items:center}input[type=checkbox]{width:auto;margin:0 8px 0 0}
     .hint{background:#fff3cd;border-radius:10px;padding:10px 14px;font-size:.88rem}.msg{min-height:1.2em;margin:8px 0 0;font-size:.9rem}
   </style>
 </head>
@@ -432,7 +434,7 @@
           <td>${esc(o.address || '—')}</td>
           <td><span class="${okMail ? '' : 'invalid-email'}">${esc(o.email || '—')}</span>${okMail ? '' : ' <span class="badge-err">⚠️</span>'}</td>
           <td><select class="st st-${st}" data-o="${o.id}">${Object.entries(STATUS_LBL).map(([k, lab]) => `<option value="${k}" ${k === st ? 'selected' : ''}>${lab}</option>`).join('')}</select>
-            ${st === 'delivered' ? `<button class="sm" data-w="${o.id}" title="Tell the customer on WhatsApp">📲</button>` : ''}</td>
+            ${st === 'delivered' ? `<button class="sm" data-w="${o.id}" title="Tell the customer on WhatsApp">📲</button>` : ''}<br><small>${o.ready_by_name ? '📦 ' + esc(o.ready_by_name) : ''} ${o.courier_name ? '🚚 ' + esc(o.courier_name) : ''}</small></td>
           <td><button class="del" data-x="${o.id}">🗑</button></td>
         </tr>`;
       };
@@ -480,23 +482,25 @@
 
     async function team() {
       const l = await api('/api/admin/staff');
-      const card = (r, title) => {
-        const s = l.find(x => x.role === r) || {};
-        return `<div class="tc" data-r="${r}"><h3>${title}</h3>
-          <label>Name<input data-f="name" value="${esc(s.name || '')}"></label>
-          <label>Language of messages<select data-f="lang">${['fr', 'en', 'ar'].map(k => `<option value="${k}" ${(s.lang || 'fr') === k ? 'selected' : ''}>${k.toUpperCase()}</option>`).join('')}</select></label>
-          <label>Telegram chat ID<input data-f="telegram_chat_id" inputmode="numeric" value="${esc(s.telegram_chat_id || '')}"></label>
-          <label>Email<input data-f="email" type="email" value="${esc(s.email || '')}"></label>
-          <div class="acts"><button class="cta sv" style="width:auto;padding:10px 26px;font-size:1rem">Save</button><button class="cn ts">Save + send test</button></div>
-          <p class="msg"></p></div>`;
-      };
+      const TITLE = { warehouse: '📦 Warehouse owners', delivery: '🚚 Delivery men' }, ADD = { warehouse: '+ Add warehouse person', delivery: '+ Add delivery man' };
+      const card = (r, s = {}) => `<div class="tc ${s.active === 0 ? 'off' : ''}" data-r="${r}" data-id="${s.id || ''}">
+        <label>Name<input data-f="name" value="${esc(s.name || '')}"></label>
+        <label>Language of messages<select data-f="lang">${['fr', 'en', 'ar'].map(k => `<option value="${k}" ${(s.lang || 'fr') === k ? 'selected' : ''}>${k.toUpperCase()}</option>`).join('')}</select></label>
+        <label>Telegram chat ID<input data-f="telegram_chat_id" inputmode="numeric" value="${esc(s.telegram_chat_id || '')}"></label>
+        <label>Email<input data-f="email" type="email" value="${esc(s.email || '')}"></label>
+        <label class="chk"><input type="checkbox" data-f="active" ${s.active === 0 ? '' : 'checked'}> Active (receives orders)</label>
+        <div class="acts"><button class="cta sv" style="width:auto;padding:10px 22px;font-size:1rem">${s.id ? 'Save' : 'Add'}</button>
+          ${s.id ? '<button class="cn ts">Save + test</button><button class="del rm">🗑 Delete</button>' : '<button class="cn rmnew">Cancel</button>'}</div>
+        <p class="msg"></p></div>`;
+      const section = r => `<h3 class="tsec">${TITLE[r]} (${l.filter(s => s.role === r).length}) <button class="cn add" data-r="${r}">${ADD[r]}</button></h3>
+        <div class="tgrid" id="g-${r}">${l.filter(s => s.role === r).map(s => card(r, s)).join('')}</div>`;
       v.innerHTML = `<h2>Team</h2>
-        <p class="hint">Each person must open your Telegram bot and press <b>Start</b>. To get a Telegram chat ID, they open <b>@userinfobot</b> and send /start: the number shown is the ID. Emails need <code>BREVO_API_KEY</code> and <code>EMAIL_FROM</code> in Render.</p>
-        <p><button class="cn" id="diag">🔍 Check setup</button></p><div id="diagOut"></div>
-        <div class="row">${card('warehouse', '📦 Warehouse owner')}${card('delivery', '🚚 Delivery man')}</div>`;
+        <p class="hint">Add as many people as you need. <b>Everyone active receives each order message, and the first person who taps the button takes it</b> (the others are told who took it). Untick <b>Active</b> to pause someone without deleting them. Each person must open your Telegram bot and press <b>Start</b>; their chat ID comes from <b>@userinfobot</b>. Emails need <code>BREVO_API_KEY</code> and <code>EMAIL_FROM</code> in Render.</p>
+        <p><button class="cn" id="diag">🔍 Check setup</button></p><div id="diagOut"></div>${section('warehouse')}${section('delivery')}`;
       v.onchange = null;
       v.onclick = async e => {
-        if (e.target.id === 'diag') {
+        const t = e.target;
+        if (t.id === 'diag') {
           $('#diagOut').textContent = 'Checking…';
           try {
             const d = await api('/api/admin/diag');
@@ -504,17 +508,27 @@
           } catch (er) { $('#diagOut').textContent = '⚠️ ' + er.message; }
           return;
         }
-        const c = e.target.closest('.tc');
-        if (!c || !(e.target.matches('.sv') || e.target.matches('.ts'))) return;
-        const r = c.dataset.r, msg = c.querySelector('.msg'), body = {};
-        c.querySelectorAll('[data-f]').forEach(x => body[x.dataset.f] = x.value.trim());
+        if (t.classList.contains('add')) { $('#g-' + t.dataset.r).insertAdjacentHTML('afterbegin', card(t.dataset.r)); return; }
+        if (t.classList.contains('rmnew')) { t.closest('.tc').remove(); return; }
+        const c = t.closest('.tc');
+        if (!c) return;
+        const r = c.dataset.r, id = c.dataset.id, msg = c.querySelector('.msg');
         try {
-          await api('/api/admin/staff/' + r, 'PUT', body);
-          if (e.target.matches('.ts')) {
-            const t = await api(`/api/admin/staff/${r}/test`, 'POST');
-            msg.innerHTML = '✅ Saved<br>' + [fmt('Telegram', t.telegram), fmt('Email', t.email)].filter(Boolean).map(esc).join('<br>');
+          if (t.classList.contains('rm')) {
+            if (!confirm('Delete this person? They will stop receiving orders.')) return;
+            await api('/api/admin/staff/' + id, 'DELETE');
+            return team();
           }
-          else msg.textContent = '✅ Saved';
+          if (!t.matches('.sv, .ts')) return;
+          const body = { role: r };
+          c.querySelectorAll('[data-f]').forEach(x => body[x.dataset.f] = x.type === 'checkbox' ? x.checked : x.value.trim());
+          const saved = await api(id ? '/api/admin/staff/' + id : '/api/admin/staff', id ? 'PUT' : 'POST', body);
+          if (!id) return team();
+          if (t.matches('.ts')) {
+            const res = await api(`/api/admin/staff/${id}/test`, 'POST');
+            msg.innerHTML = '✅ Saved<br>' + [fmt('Telegram', res.telegram), fmt('Email', res.email)].filter(Boolean).map(esc).join('<br>');
+          } else msg.textContent = '✅ Saved';
+          c.classList.toggle('off', !body.active);
         } catch (er) { msg.textContent = '⚠️ ' + er.message; }
       };
     }

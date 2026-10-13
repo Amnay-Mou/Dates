@@ -26,6 +26,12 @@ async function initDb() {
   for (const q of ['ALTER TABLE comments ADD COLUMN customer_id TEXT', 'ALTER TABLE orders ADD COLUMN customer_id TEXT']) { try { await db.execute(q); } catch {} }
   for (const q of ['ALTER TABLE orders ADD COLUMN address TEXT', 'ALTER TABLE orders ADD COLUMN ready_at TEXT', 'ALTER TABLE orders ADD COLUMN picked_at TEXT', 'ALTER TABLE orders ADD COLUMN delivered_at TEXT']) { try { await db.execute(q); } catch {} }
   await db.execute(`CREATE TABLE IF NOT EXISTS staff(role TEXT PRIMARY KEY, name TEXT, lang TEXT, telegram_chat_id TEXT, email TEXT);`);
+  // team = several people per role (replaces the old one-person-per-role "staff" table)
+  await db.execute(`CREATE TABLE IF NOT EXISTS team(id INTEGER PRIMARY KEY AUTOINCREMENT, role TEXT, name TEXT, lang TEXT, telegram_chat_id TEXT, email TEXT, active INTEGER DEFAULT 1);`);
+  for (const q of ['ALTER TABLE orders ADD COLUMN ready_by_name TEXT', 'ALTER TABLE orders ADD COLUMN courier_id INTEGER', 'ALTER TABLE orders ADD COLUMN courier_name TEXT']) { try { await db.execute(q); } catch {} }
+  if (!Number((await db.execute('SELECT COUNT(*) AS c FROM team')).rows[0].c)) { // one-time copy of the people you already saved
+    try { await db.execute('INSERT INTO team(role,name,lang,telegram_chat_id,email,active) SELECT role,name,lang,telegram_chat_id,email,1 FROM staff'); } catch {}
+  }
   // Seed initial products if empty
   const prodCheck = await db.execute('SELECT COUNT(*) as count FROM products');
   if (Number(prodCheck.rows[0].count) === 0) {
@@ -86,20 +92,21 @@ async function sendEmail(to, subject, text, buttons = []) {
 }
 
 const TXT = {
-  fr: { wh: '📦 Commande à préparer', dl: '🚚 Commande prête à livrer', p: 'Produit', q: 'Quantité', to: 'Destination', c: 'Client', tel: 'Tél', tot: 'Total', bReady: '✅ Commande préparée', bPick: "🚚 Je l'ai récupérée", bDone: '✔️ Livrée au client', map: '📍 Ouvrir dans Maps', test: '✅ Test : vous recevrez ici les commandes Filali Dates.', already: 'Déjà enregistré ✔️', notYet: 'Action indisponible pour le moment.', ok: 'Enregistré ✔️' },
-  en: { wh: '📦 Order to prepare', dl: '🚚 Order ready for delivery', p: 'Product', q: 'Quantity', to: 'Destination', c: 'Customer', tel: 'Phone', tot: 'Total', bReady: '✅ Order prepared', bPick: '🚚 I picked it up', bDone: '✔️ Delivered to customer', map: '📍 Open in Maps', test: '✅ Test: you will receive Filali Dates orders here.', already: 'Already recorded ✔️', notYet: 'Not available right now.', ok: 'Saved ✔️' },
-  ar: { wh: '📦 طلب للتحضير', dl: '🚚 طلب جاهز للتسليم', p: 'المنتج', q: 'الكمية', to: 'الوجهة', c: 'الزبون', tel: 'الهاتف', tot: 'المجموع', bReady: '✅ تم تحضير الطلب', bPick: '🚚 استلمت الطلب', bDone: '✔️ تم التسليم للزبون', map: '📍 فتح في الخرائط', test: '✅ تجربة: ستتوصل هنا بطلبات فيلالي.', already: 'تم تسجيله مسبقا ✔️', notYet: 'غير متاح حاليا.', ok: 'تم الحفظ ✔️' }
+  fr: { wh: '📦 Commande à préparer', dl: '🚚 Commande prête à livrer', p: 'Produit', q: 'Quantité', to: 'Destination', c: 'Client', tel: 'Tél', tot: 'Total', bReady: '✅ Commande préparée', bPick: "🚚 Je l'ai récupérée", bDone: '✔️ Livrée au client', map: '📍 Ouvrir dans Maps', test: '✅ Test : vous recevrez ici les commandes Filali Dates.', already: 'Déjà enregistré ✔️', notYet: 'Action indisponible pour le moment.', ok: 'Enregistré ✔️', taken: 'Déjà pris en charge par', prep: 'Déjà préparée par' },
+  en: { wh: '📦 Order to prepare', dl: '🚚 Order ready for delivery', p: 'Product', q: 'Quantity', to: 'Destination', c: 'Customer', tel: 'Phone', tot: 'Total', bReady: '✅ Order prepared', bPick: '🚚 I picked it up', bDone: '✔️ Delivered to customer', map: '📍 Open in Maps', test: '✅ Test: you will receive Filali Dates orders here.', already: 'Already recorded ✔️', notYet: 'Not available right now.', ok: 'Saved ✔️', taken: 'Already taken by', prep: 'Already prepared by' },
+  ar: { wh: '📦 طلب للتحضير', dl: '🚚 طلب جاهز للتسليم', p: 'المنتج', q: 'الكمية', to: 'الوجهة', c: 'الزبون', tel: 'الهاتف', tot: 'المجموع', bReady: '✅ تم تحضير الطلب', bPick: '🚚 استلمت الطلب', bDone: '✔️ تم التسليم للزبون', map: '📍 فتح في الخرائط', test: '✅ تجربة: ستتوصل هنا بطلبات فيلالي.', already: 'تم تسجيله مسبقا ✔️', notYet: 'غير متاح حاليا.', ok: 'تم الحفظ ✔️', taken: 'تم استلامه مسبقا من طرف', prep: 'تم تحضيره مسبقا من طرف' }
 };
 const STATUS = ['waiting', 'ready', 'delivering', 'delivered'];
 const stOf = o => o.status || 'waiting';
 const refOf = id => 'FD-' + String(id).padStart(4, '0');
 const baseUrl = req => process.env.PUBLIC_URL || `${req.protocol}://${req.get('host')}`;
 const secret = () => process.env.APP_SECRET || process.env.ADMIN_PASSWORD || 'admin123';
-const sign = (id, act) => crypto.createHmac('sha256', secret()).update(`${id}.${act}`).digest('hex').slice(0, 16);
-const okSig = (id, act, sig) => { const a = Buffer.from(String(sig)), b = Buffer.from(sign(id, act)); return a.length === b.length && crypto.timingSafeEqual(a, b); };
-const actLink = (base, id, act) => `${base}/act/${id}.${act}.${sign(id, act)}`;
+const sign = (id, act, sid) => crypto.createHmac('sha256', secret()).update(`${id}.${act}.${sid}`).digest('hex').slice(0, 16);
+const okSig = (id, act, sid, sig) => { const a = Buffer.from(String(sig)), b = Buffer.from(sign(id, act, sid)); return a.length === b.length && crypto.timingSafeEqual(a, b); };
+// every message carries personal links: the link says WHO acts (staff id), so we know who prepared / who delivers
+const actLink = (base, id, act, sid) => `${base}/act/${id}.${act}.${sid}.${sign(id, act, sid)}`;
 const mapsUrl = a => 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(a);
-const getStaff = async role => (await db.execute({ sql: 'SELECT * FROM staff WHERE role=?', args: [role] })).rows[0] || null;
+const staffOf = async role => (await db.execute({ sql: 'SELECT * FROM team WHERE role=? AND active=1 ORDER BY id', args: [role] })).rows;
 const notifyStaff = async (s, subject, text, buttons) => {
   if (!s) return {};
   const [telegram, email] = await Promise.all([sendTelegram(text, s.telegram_chat_id, buttons), sendEmail(s.email, subject, text, buttons)]);
@@ -108,40 +115,56 @@ const notifyStaff = async (s, subject, text, buttons) => {
   return { telegram, email };
 };
 
-// New order -> warehouse owner: only what is needed to prepare it (no client personal data)
+// New order -> ALL active warehouse people (first one to tap "prepared" takes it). No client personal data here.
 async function notifyWarehouse(o, base) {
-  const s = await getStaff('warehouse'); if (!s) return;
-  const x = TXT[s.lang] || TXT.fr, ref = refOf(o.id);
-  await notifyStaff(s, `${x.wh} ${ref}`, `${x.wh} ${ref}\n\n${x.p}: ${o.product}\n${x.q}: ${o.qty}`, [{ text: x.bReady, url: actLink(base, o.id, 'ready') }]);
+  const list = await staffOf('warehouse'), ref = refOf(o.id);
+  if (!list.length) return sendTelegram(`⚠️ ${ref}: no active warehouse person to notify (Admin → Team)`);
+  await Promise.all(list.map(s => { const x = TXT[s.lang] || TXT.fr; return notifyStaff(s, `${x.wh} ${ref}`, `${x.wh} ${ref}\n\n${x.p}: ${o.product}\n${x.q}: ${o.qty}`, [{ text: x.bReady, url: actLink(base, o.id, 'ready', s.id) }]); }));
 }
-// Order prepared -> delivery man: order ID + destination + client contact
+// Order prepared -> ALL active delivery people (first one to tap "picked up" takes it): ID + destination + client contact
 async function notifyDelivery(o, base) {
-  const s = await getStaff('delivery'); if (!s) return;
-  const x = TXT[s.lang] || TXT.fr, ref = refOf(o.id);
-  const text = `${x.dl} ${ref}\n\n${x.p}: ${o.product} × ${o.qty}\n${x.c}: ${o.name}\n${x.tel}: ${o.phone}\n${x.to}: ${o.address || '-'}\n${x.tot}: ${o.total} DH`;
-  const buttons = [{ text: x.bPick, url: actLink(base, o.id, 'pickup') }, { text: x.bDone, url: actLink(base, o.id, 'done') }];
-  if (o.address) buttons.push({ text: x.map, url: mapsUrl(o.address) });
-  await notifyStaff(s, `${x.dl} ${ref}`, text, buttons);
+  const list = await staffOf('delivery'), ref = refOf(o.id);
+  if (!list.length) return sendTelegram(`⚠️ ${ref}: no active delivery person to notify (Admin → Team)`);
+  await Promise.all(list.map(s => {
+    const x = TXT[s.lang] || TXT.fr;
+    const text = `${x.dl} ${ref}\n\n${x.p}: ${o.product} × ${o.qty}\n${x.c}: ${o.name}\n${x.tel}: ${o.phone}\n${x.to}: ${o.address || '-'}\n${x.tot}: ${o.total} DH`;
+    const buttons = [{ text: x.bPick, url: actLink(base, o.id, 'pickup', s.id) }, { text: x.bDone, url: actLink(base, o.id, 'done', s.id) }];
+    if (o.address) buttons.push({ text: x.map, url: mapsUrl(o.address) });
+    return notifyStaff(s, `${x.dl} ${ref}`, text, buttons);
+  }));
 }
-// One place changes a status (admin page, warehouse link, delivery link) and triggers the right messages
+// after any status change: tell the admin, and start the next step
+async function afterStatus(id, st, base) {
+  const o = (await db.execute({ sql: 'SELECT * FROM orders WHERE id=?', args: [id] })).rows[0]; if (!o) return;
+  const who = st === 'ready' ? o.ready_by_name : (st === 'delivering' || st === 'delivered') ? o.courier_name : '';
+  sendTelegram(`${{ waiting: '⏳', ready: '📦', delivering: '🚚', delivered: '✅' }[st]} ${refOf(id)} → ${st}${who ? ' (' + who + ')' : ''}\n${o.product} × ${o.qty} — ${o.name}`);
+  if (st === 'ready') await notifyDelivery(o, base);
+}
+// status changed by the ADMIN from the Orders list
 async function setStatus(id, st, base) {
   const o = (await db.execute({ sql: 'SELECT * FROM orders WHERE id=?', args: [id] })).rows[0];
-  if (!o || stOf(o) === st) return o;
-  const col = { ready: 'ready_at', delivering: 'picked_at', delivered: 'delivered_at' }[st];
-  await db.execute({ sql: `UPDATE orders SET status=?${col ? `, ${col}=?` : ''} WHERE id=?`, args: col ? [st, new Date().toISOString(), id] : [st, id] });
-  const n = { ...o, status: st };
-  sendTelegram(`${{ waiting: '⏳', ready: '📦', delivering: '🚚', delivered: '✅' }[st]} ${refOf(id)} → ${st}\n${o.product} × ${o.qty} — ${o.name}`);
-  if (st === 'ready') await notifyDelivery(n, base);
-  return n;
+  if (!o || stOf(o) === st) return;
+  const extra = { waiting: ', ready_by_name=NULL, courier_id=NULL, courier_name=NULL', ready: ', ready_at=?, courier_id=NULL, courier_name=NULL', delivering: ', picked_at=?', delivered: ', delivered_at=?' }[st];
+  await db.execute({ sql: `UPDATE orders SET status=?${extra} WHERE id=?`, args: [st, ...(extra.includes('?') ? [new Date().toISOString()] : []), id] });
+  await afterStatus(id, st, base);
 }
-const ACT = { ready: { role: 'warehouse', from: ['waiting'], to: 'ready' }, pickup: { role: 'delivery', from: ['ready'], to: 'delivering' }, done: { role: 'delivery', from: ['ready', 'delivering'], to: 'delivered' } };
+const ACT = { ready: { role: 'warehouse', to: 'ready' }, pickup: { role: 'delivery', to: 'delivering' }, done: { role: 'delivery', to: 'delivered' } };
 async function actCtx(tok) {
-  const [id, act, sig] = String(tok).split('.'), a = ACT[act];
-  if (!a || !/^\d+$/.test(id) || !okSig(id, act, sig)) return null;
+  const [id, act, sid, sig] = String(tok).split('.'), a = ACT[act];
+  if (!a || !/^\d+$/.test(id) || !/^\d+$/.test(sid) || !okSig(id, act, sid, sig)) return null;
   const o = (await db.execute({ sql: 'SELECT * FROM orders WHERE id=?', args: [Number(id)] })).rows[0];
-  if (!o) return null;
-  const s = await getStaff(a.role);
-  return { o, act, a, s, x: TXT[s && s.lang] || TXT.fr };
+  const s = (await db.execute({ sql: 'SELECT * FROM team WHERE id=? AND role=? AND active=1', args: [Number(sid), a.role] })).rows[0];
+  return o && s ? { o, act, a, s, x: TXT[s.lang] || TXT.fr } : null; // deleted / deactivated people lose their links
+}
+// what can this person do with this order right now?
+function actState(c) {
+  const { o, act, s, x } = c, st = stOf(o), free = o.courier_id == null, mine = !free && Number(o.courier_id) === Number(s.id);
+  const taken = { state: 'blocked', msg: `${x.taken} ${o.courier_name || '?'}` };
+  if (act === 'ready') return st === 'waiting' ? { state: 'todo' } : { state: 'done', msg: o.ready_by_name ? `${x.prep} ${o.ready_by_name}` : x.already };
+  if (st === 'waiting') return { state: 'blocked', msg: x.notYet };
+  if (st === 'delivered') return { state: 'done', msg: x.already };
+  if (act === 'pickup') return free ? { state: 'todo' } : mine ? { state: 'done', msg: x.already } : taken;
+  return free || mine ? { state: 'todo' } : taken;
 }
 
 // ===== COMMENTS =====
@@ -274,38 +297,64 @@ app.delete('/api/admin/orders/:id', auth, async (req, res) => {
 // ===== ONE-TAP ACTION LINKS (sent to warehouse / delivery by Telegram + email) =====
 app.get('/act/:tok', (req, res) => res.sendFile(path.join(__dirname, 'public', 'act.html')));
 app.get('/api/act/:tok', async (req, res) => {
-  const c = await actCtx(req.params.tok); if (!c) return res.status(404).json({ error: 'Invalid link' });
-  const { o, act, a, x } = c, st = stOf(o), rank = s => STATUS.indexOf(s);
+  const c = await actCtx(req.params.tok); if (!c) return res.status(404).json({ error: 'This link is no longer active.' });
+  const { o, act, s, x } = c, st = actState(c);
   const lines = [[x.p, `${o.product} × ${o.qty}`]];
-  if (act !== 'ready') lines.push([x.c, o.name], [x.tel, o.phone, 'tel:' + o.phone], [x.to, o.address || '-', o.address ? mapsUrl(o.address) : ''], [x.tot, o.total + ' DH']);
-  let state = 'todo', msg = '';
-  if (rank(st) >= rank(a.to)) { state = 'done'; msg = x.already; } else if (!a.from.includes(st)) { state = 'blocked'; msg = x.notYet; }
-  res.json({ ref: refOf(o.id), dir: c.s && c.s.lang === 'ar' ? 'rtl' : 'ltr', title: act === 'ready' ? x.wh : x.dl, lines, state, msg, button: { ready: x.bReady, pickup: x.bPick, done: x.bDone }[act] });
+  if (act !== 'ready' && (st.state === 'todo' || Number(o.courier_id) === Number(s.id))) // client data only for the person who has the order
+    lines.push([x.c, o.name], [x.tel, o.phone, 'tel:' + o.phone], [x.to, o.address || '-', o.address ? mapsUrl(o.address) : ''], [x.tot, o.total + ' DH']);
+  res.json({ ref: refOf(o.id), dir: s.lang === 'ar' ? 'rtl' : 'ltr', title: act === 'ready' ? x.wh : x.dl, lines, state: st.state, msg: st.msg || '', button: { ready: x.bReady, pickup: x.bPick, done: x.bDone }[act] });
 });
 app.post('/api/act/:tok', async (req, res) => {
-  const c = await actCtx(req.params.tok); if (!c) return res.status(404).json({ error: 'Invalid link' });
-  if (!c.a.from.includes(stOf(c.o))) return res.status(409).json({ error: c.x.notYet });
-  await setStatus(c.o.id, c.a.to, baseUrl(req));
-  const r = { ok: true, msg: c.x.ok };
-  if (c.act === 'pickup') r.next = { button: c.x.bDone, url: `/act/${c.o.id}.done.${sign(c.o.id, 'done')}` };
-  res.json(r);
+  const c = await actCtx(req.params.tok); if (!c) return res.status(404).json({ error: 'This link is no longer active.' });
+  const { o, act, s, x } = c, now = new Date().toISOString();
+  // one atomic UPDATE: if two people tap at the same moment, only the first one wins
+  const [sql, args] = {
+    ready: ["UPDATE orders SET status='ready', ready_at=?, ready_by_name=? WHERE id=? AND status='waiting'", [now, s.name, o.id]],
+    pickup: ["UPDATE orders SET status='delivering', picked_at=?, courier_id=?, courier_name=? WHERE id=? AND status IN ('ready','delivering') AND courier_id IS NULL", [now, s.id, s.name, o.id]],
+    done: ["UPDATE orders SET status='delivered', delivered_at=?, courier_id=?, courier_name=? WHERE id=? AND status IN ('ready','delivering') AND (courier_id IS NULL OR courier_id=?)", [now, s.id, s.name, o.id, s.id]]
+  }[act];
+  const r = await db.execute({ sql, args });
+  if (!r.rowsAffected) {
+    const fresh = (await db.execute({ sql: 'SELECT * FROM orders WHERE id=?', args: [o.id] })).rows[0];
+    return res.status(409).json({ error: actState({ ...c, o: fresh }).msg || x.notYet });
+  }
+  await afterStatus(o.id, ACT[act].to, baseUrl(req));
+  if (act !== 'done') for (const p of (await staffOf(s.role)).filter(p => p.id !== s.id)) // tell the others it is taken
+    sendTelegram(`ℹ️ ${refOf(o.id)} — ${(TXT[p.lang] || TXT.fr)[act === 'ready' ? 'prep' : 'taken']} ${s.name}`, p.telegram_chat_id);
+  const out = { ok: true, msg: x.ok };
+  if (act === 'pickup') out.next = { button: x.bDone, url: `/act/${o.id}.done.${s.id}.${sign(o.id, 'done', s.id)}` };
+  res.json(out);
 });
 
-// ===== TEAM (admin sets who receives what) =====
+// ===== TEAM (admin: add / edit / delete people, as many as needed per role) =====
 const ROLES = ['warehouse', 'delivery'];
-app.get('/api/admin/staff', auth, async (req, res) => res.json((await db.execute('SELECT * FROM staff')).rows));
-app.put('/api/admin/staff/:role', auth, async (req, res) => {
-  const role = req.params.role; if (!ROLES.includes(role)) return res.status(400).json({ error: 'Bad role' });
-  const b = req.body, name = clean(b.name, 60), lang = ['fr', 'en', 'ar'].includes(b.lang) ? b.lang : 'fr', tg = clean(b.telegram_chat_id, 20), email = clean(b.email, 100);
-  if (tg && !/^-?\d{5,15}$/.test(tg)) return res.status(400).json({ error: 'Telegram chat ID must be a number' });
-  if (email && !/^\S+@\S+\.\S+$/.test(email)) return res.status(400).json({ error: 'Invalid email' });
-  await db.execute({ sql: 'INSERT INTO staff(role,name,lang,telegram_chat_id,email) VALUES(?,?,?,?,?) ON CONFLICT(role) DO UPDATE SET name=excluded.name, lang=excluded.lang, telegram_chat_id=excluded.telegram_chat_id, email=excluded.email', args: [role, name, lang, tg, email] });
+function staffBody(b) {
+  const v = { role: b.role, name: clean(b.name, 60), lang: ['fr', 'en', 'ar'].includes(b.lang) ? b.lang : 'fr', tg: clean(b.telegram_chat_id, 20), email: clean(b.email, 100), active: b.active === false || b.active === 0 ? 0 : 1 };
+  if (!ROLES.includes(v.role)) return { error: 'Bad role' };
+  if (!v.name) return { error: 'Name is required' };
+  if (!v.tg && !v.email) return { error: 'Add a Telegram chat ID or an email' };
+  if (v.tg && !/^-?\d{5,15}$/.test(v.tg)) return { error: 'Telegram chat ID must be a number' };
+  if (v.email && !/^\S+@\S+\.\S+$/.test(v.email)) return { error: 'Invalid email' };
+  return { v };
+}
+app.get('/api/admin/staff', auth, async (req, res) => res.json((await db.execute('SELECT * FROM team ORDER BY role, id')).rows));
+app.post('/api/admin/staff', auth, async (req, res) => {
+  const { v, error } = staffBody(req.body); if (error) return res.status(400).json({ error });
+  const r = await db.execute({ sql: 'INSERT INTO team(role,name,lang,telegram_chat_id,email,active) VALUES(?,?,?,?,?,?)', args: [v.role, v.name, v.lang, v.tg, v.email, v.active] });
+  res.json({ id: Number(r.lastInsertRowid) });
+});
+app.put('/api/admin/staff/:id', auth, async (req, res) => {
+  const { v, error } = staffBody(req.body); if (error) return res.status(400).json({ error });
+  await db.execute({ sql: 'UPDATE team SET role=?,name=?,lang=?,telegram_chat_id=?,email=?,active=? WHERE id=?', args: [v.role, v.name, v.lang, v.tg, v.email, v.active, Number(req.params.id)] });
   res.json({ ok: true });
 });
-app.post('/api/admin/staff/:role/test', auth, async (req, res) => {
-  const s = await getStaff(req.params.role); if (!s) return res.status(404).json({ error: 'Save first' });
-  const r = await notifyStaff(s, 'Filali Dates - test', (TXT[s.lang] || TXT.fr).test + (s.name ? ' — ' + s.name : ''), []);
-  res.json(r);
+app.delete('/api/admin/staff/:id', auth, async (req, res) => {
+  await db.execute({ sql: 'DELETE FROM team WHERE id=?', args: [Number(req.params.id)] });
+  res.json({ ok: true });
+});
+app.post('/api/admin/staff/:id/test', auth, async (req, res) => {
+  const s = (await db.execute({ sql: 'SELECT * FROM team WHERE id=?', args: [Number(req.params.id)] })).rows[0]; if (!s) return res.status(404).json({ error: 'Save first' });
+  res.json(await notifyStaff(s, 'Filali Dates - test', (TXT[s.lang] || TXT.fr).test + ' — ' + s.name, []));
 });
 
 // ===== SETUP CHECK: tells the admin exactly what is missing for Telegram / email =====
@@ -320,10 +369,13 @@ app.get('/api/admin/diag', auth, async (req, res) => {
     } catch (e) { add(false, 'Telegram bot', e.message); }
   }
   add(!!process.env.TELEGRAM_CHAT_ID, 'Your admin chat ID', process.env.TELEGRAM_CHAT_ID ? 'set' : 'TELEGRAM_CHAT_ID is missing in Render');
-  for (const s of (await db.execute('SELECT * FROM staff')).rows) {
-    if (!s.telegram_chat_id) add(false, `${s.role}: Telegram`, 'no chat ID saved, so no Telegram message will be sent');
-    else if (botId && s.telegram_chat_id === botId) add(false, `${s.role}: Telegram`, "this is the BOT's own ID. Use the person's ID from @userinfobot");
-    if (!s.email) add(false, `${s.role}: email`, 'no email saved');
+  const team = (await db.execute('SELECT * FROM team')).rows;
+  for (const r of ROLES) if (!team.some(s => s.role === r && s.active)) add(false, r, 'no active person: add one in Admin → Team');
+  for (const s of team) {
+    const w = `${s.name} (${s.role})`;
+    if (!s.telegram_chat_id) add(false, `${w}: Telegram`, 'no chat ID saved');
+    else if (botId && s.telegram_chat_id === botId) add(false, `${w}: Telegram`, "this is the BOT's own ID. Use the person's ID from @userinfobot");
+    if (!s.email) add(false, `${w}: email`, 'no email saved');
   }
   const from = process.env.EMAIL_FROM;
   if (process.env.BREVO_API_KEY) {
