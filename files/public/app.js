@@ -49,6 +49,9 @@ Object.assign(I18N.ar, { s1: 'المنتج', s2: 'معلوماتك', s3: 'الت
 Object.assign(I18N.fr, { wTag: 'Palmeraies du Tafilalet · Maroc', badEmail: 'Adresse email invalide (ex. nom@gmail.com)', badPhone: 'Numéro invalide : 10 chiffres, ex. 0680719510', orderNo: 'Commande N°', custNo: 'Votre ID client :', fail: 'Une erreur est survenue. Réessayez ou contactez-nous sur WhatsApp.', ref: 'Réf.' });
 Object.assign(I18N.en, { wTag: 'Tafilalet palm groves · Morocco', badEmail: 'Invalid email address (e.g. name@gmail.com)', badPhone: 'Invalid number: 10 digits, e.g. 0680719510', orderNo: 'Order No.', custNo: 'Your customer ID:', fail: 'Something went wrong. Please try again or contact us on WhatsApp.', ref: 'Ref.' });
 Object.assign(I18N.ar, { wTag: 'واحات تافيلالت · المغرب', badEmail: 'بريد إلكتروني غير صالح (مثال: name@gmail.com)', badPhone: 'رقم غير صالح: 10 أرقام، مثال 0680719510', orderNo: 'رقم الطلب', custNo: 'رقم العميل:', fail: 'حدث خطأ. حاول مرة أخرى أو تواصل معنا عبر واتساب.', ref: 'المرجع' });
+Object.assign(I18N.fr, { addrLbl: 'Adresse de livraison (ville, quartier, rue)', badAddr: 'Adresse trop courte : ajoutez la ville, le quartier et la rue.', need: 'Remplissez le nom complet et la CIN.' });
+Object.assign(I18N.en, { addrLbl: 'Delivery address (city, area, street)', badAddr: 'Address too short: add the city, area and street.', need: 'Enter your full name and ID number.' });
+Object.assign(I18N.ar, { addrLbl: 'عنوان التسليم (المدينة، الحي، الشارع)', badAddr: 'العنوان قصير: أضف المدينة والحي والشارع.', need: 'أدخل الاسم الكامل ورقم البطاقة.' });
 let lang = localStorage.getItem('lang'); if (!I18N[lang]) lang = 'fr';
 const t = (k) => I18N[lang][k] || k, $ = (s) => document.querySelector(s);
 const dh = (n) => lang === 'ar' ? `${n} درهم` : `${n} DH`;

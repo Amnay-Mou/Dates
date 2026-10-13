@@ -5,6 +5,7 @@ const fs = require('fs');
 const { createClient } = require('@libsql/client');
 
 const app = express();
+app.set('trust proxy', 1); // so https links are built correctly behind Render
 process.on('unhandledRejection', e => console.error('Unhandled:', e));
 // every async route is protected: a DB error returns 500 instead of crashing the server
 ['get', 'post', 'put', 'delete'].forEach(m => { const o = app[m].bind(app); app[m] = (p, ...h) => o(p, ...h.map(f => f.constructor.name === 'AsyncFunction' ? (q, s, n) => f(q, s, n).catch(e => { console.error(e); if (!s.headersSent) s.status(500).json({ error: 'Server error' }); }) : f)); });
@@ -23,6 +24,8 @@ async function initDb() {
 
   await db.execute(`CREATE TABLE IF NOT EXISTS images(id TEXT PRIMARY KEY, mime TEXT, data TEXT);`);
   for (const q of ['ALTER TABLE comments ADD COLUMN customer_id TEXT', 'ALTER TABLE orders ADD COLUMN customer_id TEXT']) { try { await db.execute(q); } catch {} }
+  for (const q of ['ALTER TABLE orders ADD COLUMN address TEXT', 'ALTER TABLE orders ADD COLUMN ready_at TEXT', 'ALTER TABLE orders ADD COLUMN picked_at TEXT', 'ALTER TABLE orders ADD COLUMN delivered_at TEXT']) { try { await db.execute(q); } catch {} }
+  await db.execute(`CREATE TABLE IF NOT EXISTS staff(role TEXT PRIMARY KEY, name TEXT, lang TEXT, telegram_chat_id TEXT, email TEXT);`);
   // Seed initial products if empty
   const prodCheck = await db.execute('SELECT COUNT(*) as count FROM products');
   if (Number(prodCheck.rows[0].count) === 0) {
@@ -49,16 +52,84 @@ app.use(express.static(path.join(__dirname, 'public')));
 const clean = (s, n = 300) => String(s || '').trim().slice(0, n);
 const custId = v => /^C-[A-Z0-9]{4,10}$/.test(String(v)) ? String(v) : null;
 
-// Helper for Telegram messages
-async function sendTelegram(msg) {
+// ===== TELEGRAM + EMAIL + TEAM WORKFLOW (warehouse -> delivery) =====
+async function post(url, headers, body) {
+  const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body) });
+  if (!r.ok) console.error('POST failed', url.split('?')[0].replace(/bot[^/]+/, 'bot***'), r.status, (await r.text()).slice(0, 200));
+}
+// buttons = [{ text, url }]; admin chat is the default receiver
+async function sendTelegram(msg, chatId = process.env.TELEGRAM_CHAT_ID, buttons = []) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
-  const chatId = process.env.TELEGRAM_CHAT_ID;
   if (!token || !chatId) return;
-  fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chat_id: chatId, text: msg })
-  }).catch(err => console.error('Telegram error:', err));
+  const body = { chat_id: chatId, text: msg };
+  if (buttons.length) {
+    if (buttons.some(b => /localhost|127\.0\.0\.1/.test(b.url))) body.text += '\n\n' + buttons.map(b => `${b.text}: ${b.url}`).join('\n'); // Telegram refuses localhost buttons
+    else body.reply_markup = { inline_keyboard: buttons.map(b => [{ text: b.text, url: b.url }]) };
+  }
+  try { await post(`https://api.telegram.org/bot${token}/sendMessage`, {}, body); } catch (e) { console.error('Telegram error:', e.message); }
+}
+// Email through an HTTPS API (Render blocks SMTP). Brevo first, Resend as alternative.
+async function sendEmail(to, subject, text, buttons = []) {
+  if (!to || !process.env.EMAIL_FROM) return;
+  const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  const html = `<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.6;color:#3b2a1a">${text.split('\n').map(l => l ? `<div>${esc(l)}</div>` : '<br>').join('')}${buttons.map(b => `<p><a href="${b.url}" style="background:#e0a526;color:#2f2013;padding:12px 20px;border-radius:30px;text-decoration:none;font-weight:bold;display:inline-block">${esc(b.text)}</a></p>`).join('')}</div>`;
+  try {
+    if (process.env.BREVO_API_KEY) await post('https://api.brevo.com/v3/smtp/email', { 'api-key': process.env.BREVO_API_KEY }, { sender: { name: 'Filali Dates', email: process.env.EMAIL_FROM }, to: [{ email: to }], subject, htmlContent: html });
+    else if (process.env.RESEND_API_KEY) await post('https://api.resend.com/emails', { Authorization: 'Bearer ' + process.env.RESEND_API_KEY }, { from: `Filali Dates <${process.env.EMAIL_FROM}>`, to: [to], subject, html });
+  } catch (e) { console.error('Email error:', e.message); }
+}
+
+const TXT = {
+  fr: { wh: '📦 Commande à préparer', dl: '🚚 Commande prête à livrer', p: 'Produit', q: 'Quantité', to: 'Destination', c: 'Client', tel: 'Tél', tot: 'Total', bReady: '✅ Commande préparée', bPick: "🚚 Je l'ai récupérée", bDone: '✔️ Livrée au client', map: '📍 Ouvrir dans Maps', test: '✅ Test : vous recevrez ici les commandes Filali Dates.', already: 'Déjà enregistré ✔️', notYet: 'Action indisponible pour le moment.', ok: 'Enregistré ✔️' },
+  en: { wh: '📦 Order to prepare', dl: '🚚 Order ready for delivery', p: 'Product', q: 'Quantity', to: 'Destination', c: 'Customer', tel: 'Phone', tot: 'Total', bReady: '✅ Order prepared', bPick: '🚚 I picked it up', bDone: '✔️ Delivered to customer', map: '📍 Open in Maps', test: '✅ Test: you will receive Filali Dates orders here.', already: 'Already recorded ✔️', notYet: 'Not available right now.', ok: 'Saved ✔️' },
+  ar: { wh: '📦 طلب للتحضير', dl: '🚚 طلب جاهز للتسليم', p: 'المنتج', q: 'الكمية', to: 'الوجهة', c: 'الزبون', tel: 'الهاتف', tot: 'المجموع', bReady: '✅ تم تحضير الطلب', bPick: '🚚 استلمت الطلب', bDone: '✔️ تم التسليم للزبون', map: '📍 فتح في الخرائط', test: '✅ تجربة: ستتوصل هنا بطلبات فيلالي.', already: 'تم تسجيله مسبقا ✔️', notYet: 'غير متاح حاليا.', ok: 'تم الحفظ ✔️' }
+};
+const STATUS = ['waiting', 'ready', 'delivering', 'delivered'];
+const stOf = o => o.status || 'waiting';
+const refOf = id => 'FD-' + String(id).padStart(4, '0');
+const baseUrl = req => process.env.PUBLIC_URL || `${req.protocol}://${req.get('host')}`;
+const secret = () => process.env.APP_SECRET || process.env.ADMIN_PASSWORD || 'admin123';
+const sign = (id, act) => crypto.createHmac('sha256', secret()).update(`${id}.${act}`).digest('hex').slice(0, 16);
+const okSig = (id, act, sig) => { const a = Buffer.from(String(sig)), b = Buffer.from(sign(id, act)); return a.length === b.length && crypto.timingSafeEqual(a, b); };
+const actLink = (base, id, act) => `${base}/act/${id}.${act}.${sign(id, act)}`;
+const mapsUrl = a => 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(a);
+const getStaff = async role => (await db.execute({ sql: 'SELECT * FROM staff WHERE role=?', args: [role] })).rows[0] || null;
+const notifyStaff = async (s, subject, text, buttons) => { if (s) await Promise.all([sendTelegram(text, s.telegram_chat_id, buttons), sendEmail(s.email, subject, text, buttons)]); };
+
+// New order -> warehouse owner: only what is needed to prepare it (no client personal data)
+async function notifyWarehouse(o, base) {
+  const s = await getStaff('warehouse'); if (!s) return;
+  const x = TXT[s.lang] || TXT.fr, ref = refOf(o.id);
+  await notifyStaff(s, `${x.wh} ${ref}`, `${x.wh} ${ref}\n\n${x.p}: ${o.product}\n${x.q}: ${o.qty}`, [{ text: x.bReady, url: actLink(base, o.id, 'ready') }]);
+}
+// Order prepared -> delivery man: order ID + destination + client contact
+async function notifyDelivery(o, base) {
+  const s = await getStaff('delivery'); if (!s) return;
+  const x = TXT[s.lang] || TXT.fr, ref = refOf(o.id);
+  const text = `${x.dl} ${ref}\n\n${x.p}: ${o.product} × ${o.qty}\n${x.c}: ${o.name}\n${x.tel}: ${o.phone}\n${x.to}: ${o.address || '-'}\n${x.tot}: ${o.total} DH`;
+  const buttons = [{ text: x.bPick, url: actLink(base, o.id, 'pickup') }, { text: x.bDone, url: actLink(base, o.id, 'done') }];
+  if (o.address) buttons.push({ text: x.map, url: mapsUrl(o.address) });
+  await notifyStaff(s, `${x.dl} ${ref}`, text, buttons);
+}
+// One place changes a status (admin page, warehouse link, delivery link) and triggers the right messages
+async function setStatus(id, st, base) {
+  const o = (await db.execute({ sql: 'SELECT * FROM orders WHERE id=?', args: [id] })).rows[0];
+  if (!o || stOf(o) === st) return o;
+  const col = { ready: 'ready_at', delivering: 'picked_at', delivered: 'delivered_at' }[st];
+  await db.execute({ sql: `UPDATE orders SET status=?${col ? `, ${col}=?` : ''} WHERE id=?`, args: col ? [st, new Date().toISOString(), id] : [st, id] });
+  const n = { ...o, status: st };
+  sendTelegram(`${{ waiting: '⏳', ready: '📦', delivering: '🚚', delivered: '✅' }[st]} ${refOf(id)} → ${st}\n${o.product} × ${o.qty} — ${o.name}`);
+  if (st === 'ready') await notifyDelivery(n, base);
+  return n;
+}
+const ACT = { ready: { role: 'warehouse', from: ['waiting'], to: 'ready' }, pickup: { role: 'delivery', from: ['ready'], to: 'delivering' }, done: { role: 'delivery', from: ['ready', 'delivering'], to: 'delivered' } };
+async function actCtx(tok) {
+  const [id, act, sig] = String(tok).split('.'), a = ACT[act];
+  if (!a || !/^\d+$/.test(id) || !okSig(id, act, sig)) return null;
+  const o = (await db.execute({ sql: 'SELECT * FROM orders WHERE id=?', args: [Number(id)] })).rows[0];
+  if (!o) return null;
+  const s = await getStaff(a.role);
+  return { o, act, a, s, x: TXT[s && s.lang] || TXT.fr };
 }
 
 // ===== COMMENTS =====
@@ -88,20 +159,22 @@ app.post('/api/orders', async (req, res) => {
   const b = req.body, qty = Math.min(5, Math.max(1, parseInt(b.qty) || 1));
   const o = { 
     product_id: clean(b.product_id, 30), product: clean(b.product, 100), qty, total: Number(b.total) || 0,
-    name: clean(b.name, 100), cin: clean(b.cin, 30), phone: clean(b.phone, 30), email: clean(b.email, 100), 
+    name: clean(b.name, 100), cin: clean(b.cin, 30), phone: clean(b.phone, 30), email: clean(b.email, 100), address: clean(b.address, 200), 
     lang: ['fr','en','ar'].includes(b.lang) ? b.lang : 'fr', customer_id: custId(b.customer_id), created_at: new Date().toISOString() 
   };
   if (!o.name || !o.cin) return res.status(400).json({ error: 'Missing fields' });
   if (!/^0\d{9}$/.test(o.phone)) return res.status(400).json({ error: 'Bad phone' });
+  if (o.address.length < 6) return res.status(400).json({ error: 'Bad address' });
   if (o.email && !/^\S+@\S+\.\S+$/.test(o.email)) return res.status(400).json({ error: 'Bad email' });
 
   const ins = await db.execute({
-    sql: 'INSERT INTO orders(product_id,product,qty,total,name,cin,phone,email,lang,created_at,customer_id) VALUES(?,?,?,?,?,?,?,?,?,?,?)',
-    args: [o.product_id, o.product, o.qty, o.total, o.name, o.cin, o.phone, o.email, o.lang, o.created_at, o.customer_id]
+    sql: 'INSERT INTO orders(product_id,product,qty,total,name,cin,phone,email,lang,created_at,customer_id,address) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',
+    args: [o.product_id, o.product, o.qty, o.total, o.name, o.cin, o.phone, o.email, o.lang, o.created_at, o.customer_id, o.address]
   });
 
   const ref = 'FD-' + String(Number(ins.lastInsertRowid)).padStart(4, '0');
-  sendTelegram(`🛍️ NOUVELLE COMMANDE ${ref}\n\n🆔 Client: ${o.customer_id || '-'}\n👤 Nom: ${o.name}\n🪪 CIN: ${o.cin}\n📞 Tél: ${o.phone}\n✉️ Email: ${o.email || '-'}\n🌴 Produit: ${o.product}\n📦 Quantité: ${o.qty}\n💰 Total: ${o.total} DH`);
+  sendTelegram(`🛍️ NOUVELLE COMMANDE ${ref}\n\n🆔 Client: ${o.customer_id || '-'}\n👤 Nom: ${o.name}\n🪪 CIN: ${o.cin}\n📞 Tél: ${o.phone}\n📍 Adresse: ${o.address}\n✉️ Email: ${o.email || '-'}\n🌴 Produit: ${o.product}\n📦 Quantité: ${o.qty}\n💰 Total: ${o.total} DH`);
+  notifyWarehouse({ ...o, id: Number(ins.lastInsertRowid) }, baseUrl(req)).catch(e => console.error('Warehouse notify:', e));
   res.json({ ok: true, ref });
 });
 
@@ -176,13 +249,50 @@ app.get('/api/admin/orders', auth, async (req, res) => {
 });
 
 app.put('/api/admin/orders/:id/status', auth, async (req, res) => {
-  const st = req.body.status; if (!['waiting', 'delivered'].includes(st)) return res.status(400).json({ error: 'Bad status' });
-  await db.execute({ sql: 'UPDATE orders SET status=? WHERE id=?', args: [st, req.params.id] });
+  const st = req.body.status; if (!STATUS.includes(st)) return res.status(400).json({ error: 'Bad status' });
+  await setStatus(Number(req.params.id), st, baseUrl(req));
   res.json({ ok: true });
 });
 
 app.delete('/api/admin/orders/:id', auth, async (req, res) => {
   await db.execute({ sql: 'DELETE FROM orders WHERE id=?', args: [req.params.id] });
+  res.json({ ok: true });
+});
+
+// ===== ONE-TAP ACTION LINKS (sent to warehouse / delivery by Telegram + email) =====
+app.get('/act/:tok', (req, res) => res.sendFile(path.join(__dirname, 'public', 'act.html')));
+app.get('/api/act/:tok', async (req, res) => {
+  const c = await actCtx(req.params.tok); if (!c) return res.status(404).json({ error: 'Invalid link' });
+  const { o, act, a, x } = c, st = stOf(o), rank = s => STATUS.indexOf(s);
+  const lines = [[x.p, `${o.product} × ${o.qty}`]];
+  if (act !== 'ready') lines.push([x.c, o.name], [x.tel, o.phone, 'tel:' + o.phone], [x.to, o.address || '-', o.address ? mapsUrl(o.address) : ''], [x.tot, o.total + ' DH']);
+  let state = 'todo', msg = '';
+  if (rank(st) >= rank(a.to)) { state = 'done'; msg = x.already; } else if (!a.from.includes(st)) { state = 'blocked'; msg = x.notYet; }
+  res.json({ ref: refOf(o.id), dir: c.s && c.s.lang === 'ar' ? 'rtl' : 'ltr', title: act === 'ready' ? x.wh : x.dl, lines, state, msg, button: { ready: x.bReady, pickup: x.bPick, done: x.bDone }[act] });
+});
+app.post('/api/act/:tok', async (req, res) => {
+  const c = await actCtx(req.params.tok); if (!c) return res.status(404).json({ error: 'Invalid link' });
+  if (!c.a.from.includes(stOf(c.o))) return res.status(409).json({ error: c.x.notYet });
+  await setStatus(c.o.id, c.a.to, baseUrl(req));
+  const r = { ok: true, msg: c.x.ok };
+  if (c.act === 'pickup') r.next = { button: c.x.bDone, url: `/act/${c.o.id}.done.${sign(c.o.id, 'done')}` };
+  res.json(r);
+});
+
+// ===== TEAM (admin sets who receives what) =====
+const ROLES = ['warehouse', 'delivery'];
+app.get('/api/admin/staff', auth, async (req, res) => res.json((await db.execute('SELECT * FROM staff')).rows));
+app.put('/api/admin/staff/:role', auth, async (req, res) => {
+  const role = req.params.role; if (!ROLES.includes(role)) return res.status(400).json({ error: 'Bad role' });
+  const b = req.body, name = clean(b.name, 60), lang = ['fr', 'en', 'ar'].includes(b.lang) ? b.lang : 'fr', tg = clean(b.telegram_chat_id, 20), email = clean(b.email, 100);
+  if (tg && !/^-?\d{5,15}$/.test(tg)) return res.status(400).json({ error: 'Telegram chat ID must be a number' });
+  if (email && !/^\S+@\S+\.\S+$/.test(email)) return res.status(400).json({ error: 'Invalid email' });
+  await db.execute({ sql: 'INSERT INTO staff(role,name,lang,telegram_chat_id,email) VALUES(?,?,?,?,?) ON CONFLICT(role) DO UPDATE SET name=excluded.name, lang=excluded.lang, telegram_chat_id=excluded.telegram_chat_id, email=excluded.email', args: [role, name, lang, tg, email] });
+  res.json({ ok: true });
+});
+app.post('/api/admin/staff/:role/test', auth, async (req, res) => {
+  const s = await getStaff(req.params.role); if (!s) return res.status(404).json({ error: 'Save first' });
+  await notifyStaff(s, 'Filali Dates - test', (TXT[s.lang] || TXT.fr).test + (s.name ? ' — ' + s.name : ''), []);
   res.json({ ok: true });
 });
 

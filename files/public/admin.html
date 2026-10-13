@@ -152,6 +152,11 @@
       color: #fff;
     }
 .invalid-email{color:#c0392b}.badge-err{color:#c0392b;font-size:.75rem;font-weight:bold}code{background:#f1e6c8;padding:1px 6px;border-radius:5px;font-size:.8rem}
+    select{width:100%;padding:8px;border:1px solid #bba57c;border-radius:8px;font:inherit}
+    select.st{width:auto;min-width:130px;font-weight:bold;font-size:.82rem}
+    .st-waiting{background:#fff3cd}.st-ready{background:#dbeafe}.st-delivering{background:#ffe5b4}.st-delivered{background:#d9efdc}
+    .tc{background:#fff;border:1px solid #e5d3a5;border-radius:14px;padding:18px}.tc h3{margin:0 0 10px}.tc label{display:block;font-size:.85rem;color:#5c3418}
+    .hint{background:#fff3cd;border-radius:10px;padding:10px 14px;font-size:.88rem}.msg{min-height:1.2em;margin:8px 0 0;font-size:.9rem}
   </style>
 </head>
 <body>
@@ -168,6 +173,7 @@
         <button data-t="products" class="on">Products</button>
         <button data-t="comments">Comments</button>
         <button data-t="orders">Orders</button>
+        <button data-t="team">Team</button>
         <button id="out" style="float:right">Log out</button>
       </div>
       <div class="panel" id="v"></div>
@@ -238,7 +244,7 @@
       show();
     });
 
-    const show = () => ({ products: prods, comments: comms, orders: ords })[tab]();
+    const show = () => ({ products: prods, comments: comms, orders: ords, team: team })[tab]();
 
     const shrink = file => new Promise((res, rej) => {
       const im = new Image(), u = URL.createObjectURL(file);
@@ -406,74 +412,59 @@
       ar: o => `مرحبا ${o.name}، تم تسليم طلبك ${ref(o.id)} (${o.product} × ${o.qty}). شكرا على ثقتك! - تمور فيلالي`
     };
 
+    const STATUS_LBL = { waiting: '⏳ Waiting', ready: '📦 Prepared', delivering: '🚚 On the way', delivered: '✅ Delivered' };
+
     async function ords() {
       const l = await api('/api/admin/orders');
-
       const head = () => {
-        const dl = l.filter(o => o.status === 'delivered').length;
-        $('#oh').textContent = `Orders (${l.length}) — Waiting ${l.length - dl} / Delivered ${dl}`;
+        const c = s => l.filter(o => (o.status || 'waiting') === s).length;
+        $('#oh').textContent = `Orders (${l.length}) — Waiting ${c('waiting')} · Prepared ${c('ready')} · On the way ${c('delivering')} · Delivered ${c('delivered')}`;
       };
-
       const isValidEmail = email => !email || /^\S+@\S+\.\S+$/.test(String(email));
-
       const row = o => {
-        const d = o.status === 'delivered', t = new Date(o.created_at);
-        const emailValid = isValidEmail(o.email);
-
-        return `
-          <tr class="${d ? 'dn' : ''}" id="r${o.id}">
-            <td><b>${ref(o.id)}</b></td>
-            <td><code>${esc(o.customer_id || '—')}</code></td>
-            <td>${t.toLocaleDateString()}<br><small>${t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</small></td>
-            <td><b>${esc(o.product)}</b></td>
-            <td>${o.qty}</td>
-            <td><b>${o.total} DH</b></td>
-            <td>${esc(o.name)}</td>
-            <td>${esc(o.cin)}</td>
-            <td>${esc(o.phone)}</td>
-            <td>
-              <span class="${emailValid ? '' : 'invalid-email'}">${esc(o.email)}</span>
-              ${emailValid ? '' : '<span class="badge-err" title="Missing @ symbol">⚠️ Invalid</span>'}
-            </td>
-            <td>
-              <label><input type="radio" name="s${o.id}" value="waiting" data-o="${o.id}" ${d ? '' : 'checked'}>Waiting</label>
-              <label><input type="radio" name="s${o.id}" value="delivered" data-o="${o.id}" ${d ? 'checked' : ''}>Delivered</label>
-            </td>
-            <td><button class="del" data-x="${o.id}">🗑 Delete</button></td>
-          </tr>`;
+        const st = o.status || 'waiting', t = new Date(o.created_at), okMail = isValidEmail(o.email);
+        return `<tr class="${st === 'delivered' ? 'dn' : ''}" id="r${o.id}">
+          <td><b>${ref(o.id)}</b><br><code>${esc(o.customer_id || '—')}</code></td>
+          <td>${t.toLocaleDateString()}<br><small>${t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</small></td>
+          <td><b>${esc(o.product)}</b> × ${o.qty}<br><b>${o.total} DH</b></td>
+          <td><b>${esc(o.name)}</b><br>${esc(o.phone)}<br><small>CIN ${esc(o.cin)}</small></td>
+          <td>${esc(o.address || '—')}</td>
+          <td><span class="${okMail ? '' : 'invalid-email'}">${esc(o.email || '—')}</span>${okMail ? '' : ' <span class="badge-err">⚠️</span>'}</td>
+          <td><select class="st st-${st}" data-o="${o.id}">${Object.entries(STATUS_LBL).map(([k, lab]) => `<option value="${k}" ${k === st ? 'selected' : ''}>${lab}</option>`).join('')}</select>
+            ${st === 'delivered' ? `<button class="sm" data-w="${o.id}" title="Tell the customer on WhatsApp">📲</button>` : ''}</td>
+          <td><button class="del" data-x="${o.id}">🗑</button></td>
+        </tr>`;
       };
 
-      v.innerHTML = `
-        <h2 id="oh"></h2>
-        <div class="scroll ot">
-          <table>
-            <tr><th>Order</th><th>Customer</th><th>Date</th><th>Product</th><th>Qty</th><th>Total</th><th>Name</th><th>CIN</th><th>Phone</th><th>Email</th><th>Status</th><th></th></tr>
-            ${l.map(row).join('')}
-          </table>
-        </div>`;
-      
+      v.innerHTML = `<h2 id="oh"></h2>
+        <div class="scroll ot"><table>
+          <tr><th>Order</th><th>Date</th><th>Product</th><th>Client</th><th>Address</th><th>Email</th><th>Status</th><th></th></tr>
+          ${l.map(row).join('')}
+        </table></div>`;
       head();
+
+      const wa = o => {
+        const ph = waNum(o.phone);
+        if (ph) return window.open(`https://wa.me/${ph}?text=${encodeURIComponent((MSG[o.lang] || MSG.fr)(o))}`, '_blank');
+        alert('No valid phone number for this customer.');
+      };
 
       v.onchange = e => {
         const i = e.target.dataset.o;
         if (!i) return;
         const st = e.target.value, o = l.find(x => x.id == i);
         let w = null;
-        if (st === 'delivered') {
-          const ph = waNum(o.phone);
-          if (ph) w = window.open(`https://wa.me/${ph}?text=${encodeURIComponent((MSG[o.lang] || MSG.fr)(o))}`, '_blank');
-          else alert('No valid phone number for this customer.');
-        }
+        if (st === 'delivered') w = wa(o);
         api(`/api/admin/orders/${i}/status`, 'PUT', { status: st }).then(() => {
           o.status = st;
+          e.target.className = 'st st-' + st;
           e.target.closest('tr').classList.toggle('dn', st === 'delivered');
           head();
-        }).catch(() => {
-          if (w) w.close();
-        });
+        }).catch(() => { if (w) w.close(); });
       };
 
       v.onclick = async e => {
+        if (e.target.dataset.w) return wa(l.find(o => o.id == e.target.dataset.w));
         const x = e.target.dataset.x;
         if (!x || !confirm('Delete this order permanently?')) return;
         await api('/api/admin/orders/' + x, 'DELETE');
@@ -482,6 +473,40 @@
         head();
       };
     }
+
+    async function team() {
+      const l = await api('/api/admin/staff');
+      const card = (r, title) => {
+        const s = l.find(x => x.role === r) || {};
+        return `<div class="tc" data-r="${r}"><h3>${title}</h3>
+          <label>Name<input data-f="name" value="${esc(s.name || '')}"></label>
+          <label>Language of messages<select data-f="lang">${['fr', 'en', 'ar'].map(k => `<option value="${k}" ${(s.lang || 'fr') === k ? 'selected' : ''}>${k.toUpperCase()}</option>`).join('')}</select></label>
+          <label>Telegram chat ID<input data-f="telegram_chat_id" inputmode="numeric" value="${esc(s.telegram_chat_id || '')}"></label>
+          <label>Email<input data-f="email" type="email" value="${esc(s.email || '')}"></label>
+          <div class="acts"><button class="cta sv" style="width:auto;padding:10px 26px;font-size:1rem">Save</button><button class="cn ts">Save + send test</button></div>
+          <p class="msg"></p></div>`;
+      };
+      v.innerHTML = `<h2>Team</h2>
+        <p class="hint">Each person must open your Telegram bot and press <b>Start</b>. To get a Telegram chat ID, they open <b>@userinfobot</b> and send /start: the number shown is the ID. Emails need <code>BREVO_API_KEY</code> and <code>EMAIL_FROM</code> in Render.</p>
+        <div class="row">${card('warehouse', '📦 Warehouse owner')}${card('delivery', '🚚 Delivery man')}</div>`;
+      v.onchange = null;
+      v.onclick = async e => {
+        const c = e.target.closest('.tc');
+        if (!c || !(e.target.matches('.sv') || e.target.matches('.ts'))) return;
+        const r = c.dataset.r, msg = c.querySelector('.msg'), body = {};
+        c.querySelectorAll('[data-f]').forEach(x => body[x.dataset.f] = x.value.trim());
+        try {
+          await api('/api/admin/staff/' + r, 'PUT', body);
+          if (e.target.matches('.ts')) { await api(`/api/admin/staff/${r}/test`, 'POST'); msg.textContent = '✅ Saved. Test sent: check Telegram / email.'; }
+          else msg.textContent = '✅ Saved';
+        } catch (er) { msg.textContent = '⚠️ ' + er.message; }
+      };
+    }
+
+    // live view: the orders list refreshes by itself when the team updates a status
+    setInterval(() => {
+      if (tab === 'orders' && app.style.display !== 'none' && !(document.activeElement && document.activeElement.matches('select'))) ords().catch(() => {});
+    }, 20000);
 
     if (tok) start();
   </script>

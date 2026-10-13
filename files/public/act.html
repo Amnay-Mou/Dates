@@ -1,0 +1,42 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Filali Dates</title>
+  <link rel="icon" type="image/png" href="/images/logo.png">
+  <link rel="stylesheet" href="/style.css">
+  <style>
+    .actbox{max-width:480px;margin:0 auto;text-align:center}.actbox img{height:64px;width:64px;border-radius:50%;background:#fff;object-fit:contain;padding:3px}
+    .aref{font-size:2.2rem;font-weight:bold;color:#8a5a14;margin:8px 0}.actbox ul{list-style:none;padding:0;margin:16px 0;text-align:start}
+    .actbox li{padding:10px 0;border-bottom:1px solid #e6d8b4}.actbox li small{display:block;font-size:.75rem;color:#8a7a5a;text-transform:uppercase;letter-spacing:.05em}
+    .actbox li a{color:#8a5a14;font-weight:bold}.actbox .cta{margin-top:10px;display:block;text-decoration:none}.actbox .cta.alt{background:#fff;border:2px solid var(--gold)}
+  </style>
+</head>
+<body>
+  <main><div class="panel actbox" id="box">…</div></main>
+  <script>
+    const $ = s => document.querySelector(s), tok = location.pathname.split('/').pop();
+    const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const head = d => `<img src="/images/logo.png" alt=""><div class="aref">${esc(d.ref)}</div><h2>${esc(d.title)}</h2>
+      <ul>${d.lines.map(([k, v, h]) => `<li><small>${esc(k)}</small>${h ? `<a href="${esc(h)}" target="_blank" rel="noopener">${esc(v)}</a>` : esc(v)}</li>`).join('')}</ul>`;
+    let data;
+    async function load() {
+      const r = await fetch('/api/act/' + tok), d = await r.json();
+      if (!r.ok) { box.innerHTML = `<h2>⚠️</h2><p>${esc(d.error)}</p>`; return; }
+      data = d; document.documentElement.dir = d.dir;
+      box.innerHTML = head(d) + (d.state === 'todo' ? `<button class="cta" id="go">${esc(d.button)}</button>` : `<p class="save">${esc(d.msg)}</p>`);
+      if (d.state === 'todo') go.onclick = act;
+    }
+    async function act() {
+      go.disabled = true; go.style.opacity = .6;
+      const r = await fetch('/api/act/' + tok, { method: 'POST' }), d = await r.json();
+      if (!r.ok) { go.disabled = false; go.style.opacity = 1; alert(d.error || 'Error'); return; }
+      box.innerHTML = head(data) + `<div class="tick">✓</div><p class="save">${esc(d.msg)}</p>` + (d.next ? `<a class="cta alt" href="${esc(d.next.url)}">${esc(d.next.button)}</a>` : '');
+    }
+    load();
+    document.addEventListener('keydown', e => { if (e.key === 'Enter' && window.go && !go.disabled) go.click(); });
+  </script>
+</body>
+</html>

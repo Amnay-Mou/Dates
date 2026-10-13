@@ -18,6 +18,9 @@
         <input id="nm" autocomplete="name" />
         <label data-i="cin"></label>
         <input id="cin" />
+        <label data-i="addrLbl"></label>
+        <input id="ad" autocomplete="street-address" />
+        <p id="adErr" class="field-err"></p>
         <label data-i="phone"></label>
         <input id="ph" type="tel" inputmode="numeric" maxlength="10" placeholder="0680719510" autocomplete="tel" />
         <p id="phErr" class="field-err"></p>
@@ -46,22 +49,25 @@
       window.onLang = () => { sum.textContent = o ? `\u2068${o.product}\u2069 × ${o.qty} = \u2068${dh(o.total)}\u2069` : ''; };
 
       const mark = (el, box, msg) => { box.textContent = msg; el.classList.toggle('input-err', !!msg); return !msg; };
+      const vAddr = () => mark(ad, adErr, ad.value.trim().length >= 6 ? '' : t('badAddr'));
       const vPhone = () => mark(ph, phErr, /^0\d{9}$/.test(ph.value) ? '' : t('badPhone'));
       const vEmail = () => { const v = em.value.trim(); return mark(em, emErr, !v || /^\S+@\S+\.\S+$/.test(v) ? '' : t('badEmail')); };
       ph.oninput = () => { ph.value = ph.value.replace(/\D/g, '').slice(0, 10); if (phErr.textContent) vPhone(); };
       em.oninput = () => { if (emErr.textContent) vEmail(); };
+      ad.oninput = () => { if (adErr.textContent) vAddr(); };
 
       ok.onclick = async () => {
         err.textContent = '';
         if (!nm.value.trim() || !cin.value.trim()) { err.textContent = t('need'); return; }
-        const p = vPhone(), m = vEmail();
+        const a = vAddr(), p = vPhone(), m = vEmail();
+        if (!a) { ad.focus(); return; }
         if (!p) { ph.focus(); return; }
         if (!m) { em.focus(); return; }
         ok.disabled = true; ok.style.opacity = 0.6;
         try {
           const r = await fetch('/api/orders', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ product_id: o.id, product: o.product, qty: o.qty, total: o.total, name: nm.value, cin: cin.value, phone: ph.value, email: em.value, lang, customer_id: cid() })
+            body: JSON.stringify({ product_id: o.id, product: o.product, qty: o.qty, total: o.total, name: nm.value, cin: cin.value, address: ad.value, phone: ph.value, email: em.value, lang, customer_id: cid() })
           });
           if (!r.ok) throw 0;
           const d = await r.json();
