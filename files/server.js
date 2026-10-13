@@ -55,28 +55,34 @@ const custId = v => /^C-[A-Z0-9]{4,10}$/.test(String(v)) ? String(v) : null;
 // ===== TELEGRAM + EMAIL + TEAM WORKFLOW (warehouse -> delivery) =====
 async function post(url, headers, body) {
   const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body) });
-  if (!r.ok) console.error('POST failed', url.split('?')[0].replace(/bot[^/]+/, 'bot***'), r.status, (await r.text()).slice(0, 200));
+  const text = await r.text();
+  let j = {}; try { j = JSON.parse(text); } catch {}
+  if (!r.ok) console.error('POST failed', url.split('?')[0].replace(/bot[^/]+/, 'bot***'), r.status, text.slice(0, 200));
+  return { ok: r.ok, error: r.ok ? '' : (j.description || j.message || text.slice(0, 160) || 'HTTP ' + r.status) };
 }
-// buttons = [{ text, url }]; admin chat is the default receiver
+// buttons = [{ text, url }]; admin chat is the default receiver. Always returns { ok, error, skipped }
 async function sendTelegram(msg, chatId = process.env.TELEGRAM_CHAT_ID, buttons = []) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
-  if (!token || !chatId) return;
+  if (!token) return { ok: false, skipped: true, error: 'TELEGRAM_BOT_TOKEN is missing in Render' };
+  if (!chatId) return { ok: false, skipped: true, error: 'no Telegram chat ID' };
   const body = { chat_id: chatId, text: msg };
   if (buttons.length) {
     if (buttons.some(b => /localhost|127\.0\.0\.1/.test(b.url))) body.text += '\n\n' + buttons.map(b => `${b.text}: ${b.url}`).join('\n'); // Telegram refuses localhost buttons
     else body.reply_markup = { inline_keyboard: buttons.map(b => [{ text: b.text, url: b.url }]) };
   }
-  try { await post(`https://api.telegram.org/bot${token}/sendMessage`, {}, body); } catch (e) { console.error('Telegram error:', e.message); }
+  try { return await post(`https://api.telegram.org/bot${token}/sendMessage`, {}, body); } catch (e) { console.error('Telegram error:', e.message); return { ok: false, error: e.message }; }
 }
-// Email through an HTTPS API (Render blocks SMTP). Brevo first, Resend as alternative.
+// Email through an HTTPS API (Render blocks SMTP). Brevo first, Resend as alternative. Always returns { ok, error, skipped }
 async function sendEmail(to, subject, text, buttons = []) {
-  if (!to || !process.env.EMAIL_FROM) return;
+  if (!to) return { ok: false, skipped: true, error: 'no email address' };
+  if (!process.env.EMAIL_FROM) return { ok: false, error: 'EMAIL_FROM is missing in Render' };
   const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
   const html = `<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.6;color:#3b2a1a">${text.split('\n').map(l => l ? `<div>${esc(l)}</div>` : '<br>').join('')}${buttons.map(b => `<p><a href="${b.url}" style="background:#e0a526;color:#2f2013;padding:12px 20px;border-radius:30px;text-decoration:none;font-weight:bold;display:inline-block">${esc(b.text)}</a></p>`).join('')}</div>`;
   try {
-    if (process.env.BREVO_API_KEY) await post('https://api.brevo.com/v3/smtp/email', { 'api-key': process.env.BREVO_API_KEY }, { sender: { name: 'Filali Dates', email: process.env.EMAIL_FROM }, to: [{ email: to }], subject, htmlContent: html });
-    else if (process.env.RESEND_API_KEY) await post('https://api.resend.com/emails', { Authorization: 'Bearer ' + process.env.RESEND_API_KEY }, { from: `Filali Dates <${process.env.EMAIL_FROM}>`, to: [to], subject, html });
-  } catch (e) { console.error('Email error:', e.message); }
+    if (process.env.BREVO_API_KEY) return await post('https://api.brevo.com/v3/smtp/email', { 'api-key': process.env.BREVO_API_KEY }, { sender: { name: 'Filali Dates', email: process.env.EMAIL_FROM }, to: [{ email: to }], subject, htmlContent: html });
+    if (process.env.RESEND_API_KEY) return await post('https://api.resend.com/emails', { Authorization: 'Bearer ' + process.env.RESEND_API_KEY }, { from: `Filali Dates <${process.env.EMAIL_FROM}>`, to: [to], subject, html });
+    return { ok: false, error: 'BREVO_API_KEY is missing in Render' };
+  } catch (e) { console.error('Email error:', e.message); return { ok: false, error: e.message }; }
 }
 
 const TXT = {
@@ -94,7 +100,13 @@ const okSig = (id, act, sig) => { const a = Buffer.from(String(sig)), b = Buffer
 const actLink = (base, id, act) => `${base}/act/${id}.${act}.${sign(id, act)}`;
 const mapsUrl = a => 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(a);
 const getStaff = async role => (await db.execute({ sql: 'SELECT * FROM staff WHERE role=?', args: [role] })).rows[0] || null;
-const notifyStaff = async (s, subject, text, buttons) => { if (s) await Promise.all([sendTelegram(text, s.telegram_chat_id, buttons), sendEmail(s.email, subject, text, buttons)]); };
+const notifyStaff = async (s, subject, text, buttons) => {
+  if (!s) return {};
+  const [telegram, email] = await Promise.all([sendTelegram(text, s.telegram_chat_id, buttons), sendEmail(s.email, subject, text, buttons)]);
+  const bad = [!telegram.ok && !telegram.skipped && 'Telegram: ' + telegram.error, !email.ok && !email.skipped && 'Email: ' + email.error].filter(Boolean);
+  if (bad.length) sendTelegram(`⚠️ Notification failed (${s.role} ${s.name || ''})\n${bad.join('\n')}`); // tell the admin instead of failing silently
+  return { telegram, email };
+};
 
 // New order -> warehouse owner: only what is needed to prepare it (no client personal data)
 async function notifyWarehouse(o, base) {
@@ -292,8 +304,48 @@ app.put('/api/admin/staff/:role', auth, async (req, res) => {
 });
 app.post('/api/admin/staff/:role/test', auth, async (req, res) => {
   const s = await getStaff(req.params.role); if (!s) return res.status(404).json({ error: 'Save first' });
-  await notifyStaff(s, 'Filali Dates - test', (TXT[s.lang] || TXT.fr).test + (s.name ? ' — ' + s.name : ''), []);
-  res.json({ ok: true });
+  const r = await notifyStaff(s, 'Filali Dates - test', (TXT[s.lang] || TXT.fr).test + (s.name ? ' — ' + s.name : ''), []);
+  res.json(r);
+});
+
+// ===== SETUP CHECK: tells the admin exactly what is missing for Telegram / email =====
+app.get('/api/admin/diag', auth, async (req, res) => {
+  const out = [], add = (ok, label, detail = '') => out.push({ ok, label, detail });
+  const tok = process.env.TELEGRAM_BOT_TOKEN; let botId = '';
+  if (!tok) add(false, 'Telegram bot', 'TELEGRAM_BOT_TOKEN is missing in Render');
+  else {
+    try {
+      const j = await (await fetch(`https://api.telegram.org/bot${tok}/getMe`)).json();
+      if (j.ok) { botId = String(j.result.id); add(true, 'Telegram bot', `@${j.result.username} (bot ID ${botId})`); } else add(false, 'Telegram bot', 'token rejected: ' + j.description);
+    } catch (e) { add(false, 'Telegram bot', e.message); }
+  }
+  add(!!process.env.TELEGRAM_CHAT_ID, 'Your admin chat ID', process.env.TELEGRAM_CHAT_ID ? 'set' : 'TELEGRAM_CHAT_ID is missing in Render');
+  for (const s of (await db.execute('SELECT * FROM staff')).rows) {
+    if (!s.telegram_chat_id) add(false, `${s.role}: Telegram`, 'no chat ID saved, so no Telegram message will be sent');
+    else if (botId && s.telegram_chat_id === botId) add(false, `${s.role}: Telegram`, "this is the BOT's own ID. Use the person's ID from @userinfobot");
+    if (!s.email) add(false, `${s.role}: email`, 'no email saved');
+  }
+  const from = process.env.EMAIL_FROM;
+  if (process.env.BREVO_API_KEY) {
+    try {
+      const r = await fetch('https://api.brevo.com/v3/senders', { headers: { 'api-key': process.env.BREVO_API_KEY } });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) add(false, 'Brevo API key', `rejected (${r.status}) ${j.message || ''}. Create an API key (starts with xkeysib-), not an SMTP key`);
+      else {
+        add(true, 'Brevo API key', 'valid');
+        const s = (j.senders || []).find(x => from && String(x.email).toLowerCase() === from.toLowerCase());
+        if (!from) add(false, 'EMAIL_FROM', 'missing in Render');
+        else if (!s) add(false, 'EMAIL_FROM', `${from} is not a sender in Brevo (Senders, Domains & Dedicated IPs → Senders → Add a sender)`);
+        else if (s.active === false) add(false, 'EMAIL_FROM', `${from} is not verified yet: open the email Brevo sent you and click the link`);
+        else add(true, 'EMAIL_FROM', `${from} is a verified sender`);
+      }
+    } catch (e) { add(false, 'Brevo', e.message); }
+  } else if (process.env.RESEND_API_KEY) add(!!from, 'Resend', from ? `key set, sender ${from}` : 'EMAIL_FROM is missing in Render');
+  else add(false, 'Email', 'BREVO_API_KEY is missing in Render');
+  const pu = process.env.PUBLIC_URL;
+  add(!pu || /^https:\/\//.test(pu), 'PUBLIC_URL (links in messages)', !pu ? `not set, using ${baseUrl(req)}` : /^https:\/\//.test(pu) ? pu : `"${pu}" must start with https://`);
+  add(!!process.env.APP_SECRET, 'APP_SECRET', process.env.APP_SECRET ? 'set' : 'missing: set a long random text in Render');
+  res.json(out);
 });
 
 const PORT = process.env.PORT || 3000;

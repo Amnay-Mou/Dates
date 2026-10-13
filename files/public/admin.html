@@ -156,6 +156,7 @@
     select.st{width:auto;min-width:130px;font-weight:bold;font-size:.82rem}
     .st-waiting{background:#fff3cd}.st-ready{background:#dbeafe}.st-delivering{background:#ffe5b4}.st-delivered{background:#d9efdc}
     .tc{background:#fff;border:1px solid #e5d3a5;border-radius:14px;padding:18px}.tc h3{margin:0 0 10px}.tc label{display:block;font-size:.85rem;color:#5c3418}
+    .dg{padding:6px 10px;border-radius:8px;margin:4px 0;font-size:.88rem}.dg.ok{background:#e3f4e6}.dg.bad{background:#fdecea}
     .hint{background:#fff3cd;border-radius:10px;padding:10px 14px;font-size:.88rem}.msg{min-height:1.2em;margin:8px 0 0;font-size:.9rem}
   </style>
 </head>
@@ -474,6 +475,9 @@
       };
     }
 
+    const fmt = (n, r) => !r ? '' : r.ok ? `✔ ${n} sent` : r.skipped ? `– ${n} skipped (${r.error})` : `✖ ${n}: ${r.error}` +
+      (/initiate/i.test(r.error) ? ' → the person must open your bot and press Start' : /chat not found/i.test(r.error) ? ' → wrong chat ID (use the ID from @userinfobot)' : '');
+
     async function team() {
       const l = await api('/api/admin/staff');
       const card = (r, title) => {
@@ -488,16 +492,28 @@
       };
       v.innerHTML = `<h2>Team</h2>
         <p class="hint">Each person must open your Telegram bot and press <b>Start</b>. To get a Telegram chat ID, they open <b>@userinfobot</b> and send /start: the number shown is the ID. Emails need <code>BREVO_API_KEY</code> and <code>EMAIL_FROM</code> in Render.</p>
+        <p><button class="cn" id="diag">🔍 Check setup</button></p><div id="diagOut"></div>
         <div class="row">${card('warehouse', '📦 Warehouse owner')}${card('delivery', '🚚 Delivery man')}</div>`;
       v.onchange = null;
       v.onclick = async e => {
+        if (e.target.id === 'diag') {
+          $('#diagOut').textContent = 'Checking…';
+          try {
+            const d = await api('/api/admin/diag');
+            $('#diagOut').innerHTML = d.map(x => `<div class="dg ${x.ok ? 'ok' : 'bad'}">${x.ok ? '✔' : '✖'} <b>${esc(x.label)}</b> ${esc(x.detail)}</div>`).join('');
+          } catch (er) { $('#diagOut').textContent = '⚠️ ' + er.message; }
+          return;
+        }
         const c = e.target.closest('.tc');
         if (!c || !(e.target.matches('.sv') || e.target.matches('.ts'))) return;
         const r = c.dataset.r, msg = c.querySelector('.msg'), body = {};
         c.querySelectorAll('[data-f]').forEach(x => body[x.dataset.f] = x.value.trim());
         try {
           await api('/api/admin/staff/' + r, 'PUT', body);
-          if (e.target.matches('.ts')) { await api(`/api/admin/staff/${r}/test`, 'POST'); msg.textContent = '✅ Saved. Test sent: check Telegram / email.'; }
+          if (e.target.matches('.ts')) {
+            const t = await api(`/api/admin/staff/${r}/test`, 'POST');
+            msg.innerHTML = '✅ Saved<br>' + [fmt('Telegram', t.telegram), fmt('Email', t.email)].filter(Boolean).map(esc).join('<br>');
+          }
           else msg.textContent = '✅ Saved';
         } catch (er) { msg.textContent = '⚠️ ' + er.message; }
       };
