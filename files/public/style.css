@@ -139,3 +139,22 @@ input.input-err {
 .wv-btn .arr{font-style:normal;transition:transform .3s var(--ease)}.wv-btn:hover .arr{transform:translateX(5px)}
 [dir=rtl] .wv-btn .arr{transform:scaleX(-1)}[dir=rtl] .wv-btn:hover .arr{transform:scaleX(-1) translateX(5px)}
 @media(max-width:800px){.wv-cards{grid-template-columns:1fr}}
+
+/* ===== waiting screen ===== */
+[hidden]{display:none!important}
+.ld{position:fixed;inset:0;z-index:200;display:grid;place-content:center;justify-items:center;gap:6px;padding:20px;text-align:center;background:radial-gradient(circle at 50% 40%,#fff8e7,#f3dfae);transition:opacity .4s}
+.ld.out{opacity:0;pointer-events:none}.ld-svg{width:150px;height:auto;overflow:visible}
+.fronds{transform-origin:80px 64px;animation:sway 3s ease-in-out infinite alternate}@keyframes sway{from{transform:rotate(-3deg)}to{transform:rotate(3deg)}}
+.dt{animation:drop 1.8s cubic-bezier(.5,0,.8,.6) infinite}.d2{animation-delay:.6s}.d3{animation-delay:1.2s}
+@keyframes drop{0%{transform:translateY(0);opacity:0}15%{opacity:1}85%{transform:translateY(88px);opacity:1}100%{transform:translateY(94px);opacity:0}}
+.ld-t{font-size:1.25rem;color:#5c3418;margin:6px 0 0}.ld-s{font-size:.9rem;color:#8a7a5a;min-height:1.2em;margin:0}.ld-btn{width:auto;padding:10px 30px;font-size:1rem;margin-top:8px}
+.dots::after{content:'';animation:dots 1.4s steps(4) infinite}@keyframes dots{0%{content:''}25%{content:'.'}50%{content:'..'}75%{content:'...'}}
+/* ===== delivery / checkout details ===== */
+select{width:100%;padding:11px;margin:6px 0 14px;border:1px solid #bba57c;border-radius:8px;font:inherit;background:#fff}
+select.input-err{border-color:#e74c3c!important;background:#fff8f8!important}
+.hp{position:absolute!important;left:-9999px;width:1px!important;height:1px!important;opacity:0;pointer-events:none}
+.note{font-size:.8rem;color:#8a5a14;margin:-8px 0 12px}.info{font-size:.85rem;color:#5c3418;background:#fff7dc;border-radius:10px;padding:8px 12px;margin:12px 0}
+.calc{background:#fff;border:1px solid #ecd9a8;border-radius:12px;padding:10px 14px;margin:6px 0 14px}.calc div{display:flex;justify-content:space-between;gap:12px;padding:4px 0}
+.calc .tot{border-top:1px solid #ecd9a8;margin-top:4px;padding-top:8px;font-size:1.1rem}
+.locbtn{background:#fff;border:2px solid var(--gold);border-radius:30px;padding:9px 16px;font:inherit;cursor:pointer;margin:0 0 6px}.locbtn:disabled{opacity:.6}
+.locmsg{font-size:.85rem;margin:0 0 12px;min-height:1em}

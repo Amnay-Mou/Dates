@@ -1,12 +1,16 @@
 // ===== EDIT YOUR COMPANY + PRODUCTS HERE =====
-const COMPANY = { name: 'Filali Dates', wa: '212600000000', phone: '+212 600 000 000', email: 'contact@filali-dates.ma', owner: 'Your Name',
+const COMPANY = { name: 'Filali Dates', wa: '212696171655', phone: '+212 696 171 655', email: 'contact@filali-dates.ma', owner: 'Your Name',
   address: { fr: '12 Rue des Oliviers, Meknès, Maroc', en: '12 Olive Street, Meknes, Morocco', ar: 'شارع الزيتون 12، مكناس، المغرب' },
-  social: { Facebook: 'https://facebook.com/', WhatsApp: 'https://wa.me/212600000000', Instagram: 'https://instagram.com/', TikTok: 'https://tiktok.com/' } };
-let PRODUCTS = [];
-const ready = fetch('/api/products').then(r => r.json()).then(rows => { PRODUCTS = rows.map(r => ({ id: r.id, price: r.price, old: r.old_price, until: r.until || '',
+  social: { WhatsApp: 'https://wa.me/212696171655' } }; // add Facebook / Instagram / TikTok links here when the accounts exist
+let PRODUCTS = [], LOAD_FAILED = false;
+const ready = fetch('/api/products').then(r => { if (!r.ok) throw 0; return r.json(); }).then(rows => { PRODUCTS = rows.map(r => ({ id: r.id, price: r.price, old: r.old_price, until: r.until || '',
   imgs: r.images.length ? r.images : ['images/none.svg'], name: { fr: r.name_fr, en: r.name_en, ar: r.name_ar || r.name_en }, desc: { fr: r.desc_fr, en: r.desc_en, ar: r.desc_ar || r.desc_en } })); })
-  .catch(() => document.addEventListener('DOMContentLoaded', () => document.body.insertAdjacentHTML('afterbegin',
-    '<p style="background:#c0392b;color:#fff;padding:12px;margin:0;text-align:center">Cannot reach the server. Open http://localhost:3000 and restart it with npm start.</p><i id="pready"></i>')));
+  
+  .catch(() => { // friendly error is shown by the waiting screen (see hideLoader)
+    LOAD_FAILED = true;
+    const mark = () => document.body.insertAdjacentHTML('beforeend', '<i id="pready"></i>');
+    document.readyState === 'loading' ? document.addEventListener('DOMContentLoaded', mark) : mark();
+  });
 const I18N = {
   fr: { home: 'Accueil', contact: 'Contactez-nous', about: 'À propos', title: 'Nos fromages', qty: 'Quantité', add: 'Ajouter au panier', total: 'Total', until: "jusqu'au",
     comments: 'Commentaires', yourName: 'Votre nom', yourComment: 'Votre commentaire', send: 'Publier', checkout: 'Finaliser votre commande', fullName: 'Nom complet', cin: 'N° de carte (CIN)',
@@ -52,6 +56,30 @@ Object.assign(I18N.ar, { wTag: 'واحات تافيلالت · المغرب', ba
 Object.assign(I18N.fr, { addrLbl: 'Adresse de livraison (ville, quartier, rue)', badAddr: 'Adresse trop courte : ajoutez la ville, le quartier et la rue.', need: 'Remplissez le nom complet et la CIN.' });
 Object.assign(I18N.en, { addrLbl: 'Delivery address (city, area, street)', badAddr: 'Address too short: add the city, area and street.', need: 'Enter your full name and ID number.' });
 Object.assign(I18N.ar, { addrLbl: 'عنوان التسليم (المدينة، الحي، الشارع)', badAddr: 'العنوان قصير: أضف المدينة والحي والشارع.', need: 'أدخل الاسم الكامل ورقم البطاقة.' });
+Object.assign(I18N.fr, { loading: 'Nous préparons vos dattes', slow: 'Le serveur se réveille, encore quelques secondes…', loadFail: 'Problème de connexion. Vérifiez votre internet puis réessayez.', retry: 'Réessayer',
+  boxNote: 'Vendu en boîte de 2 kg', prepInfo: 'Préparation de votre commande : 1 jour (2 jours maximum). Le délai et les frais de livraison dépendent de votre ville.',
+  cinLbl: 'N° de carte (CIN) — facultatif', cinNote: 'Facultatif. Si vous ne le saisissez pas maintenant, envoyez-le-nous sur WhatsApp après la commande.',
+  cinAfter: 'Pensez à nous envoyer votre numéro de carte (CIN) sur WhatsApp pour finaliser la commande.', cinWa: '💬 Envoyer mon CIN sur WhatsApp', cinMsg: 'Bonjour, voici mon numéro de carte (CIN) pour la commande',
+  need: 'Entrez votre nom complet.', cityLbl: 'Ville', cityPick: 'Choisissez votre ville', badCity: 'Veuillez choisir votre ville.', etaLbl: 'Délai de livraison estimé',
+  subLbl: 'Produits', feeLbl: 'Livraison', totLbl: 'Total', feeFree: 'Gratuite', feeTbd: 'à confirmer sur WhatsApp', plusFee: '+ frais de livraison', freeFrom: 'Livraison gratuite à partir de',
+  locBtn: '📍 Utiliser ma position', locOk: 'Position ajoutée', locDenied: "Position non partagée. Saisissez votre adresse à la place.", locNo: "La géolocalisation n'est pas disponible sur cet appareil.",
+  addrLbl: 'Adresse de livraison (quartier, rue, repère)', badAddr: 'Ajoutez votre adresse (quartier, rue) ou partagez votre position.' });
+Object.assign(I18N.en, { loading: 'Preparing your dates', slow: 'The server is waking up, just a few more seconds…', loadFail: 'Connection problem. Check your internet and try again.', retry: 'Try again',
+  boxNote: 'Sold in boxes of 2 kg', prepInfo: 'Your order is prepared within 1 day (2 days maximum). Delivery time and fees depend on your city.',
+  cinLbl: 'ID number (CIN) — optional', cinNote: 'Optional. If you leave it empty, please send it to us on WhatsApp after ordering.',
+  cinAfter: 'Please send us your ID number (CIN) on WhatsApp to complete your order.', cinWa: '💬 Send my ID on WhatsApp', cinMsg: 'Hello, here is my ID number (CIN) for order',
+  need: 'Enter your full name.', cityLbl: 'City', cityPick: 'Choose your city', badCity: 'Please choose your city.', etaLbl: 'Estimated delivery time',
+  subLbl: 'Products', feeLbl: 'Delivery', totLbl: 'Total', feeFree: 'Free', feeTbd: 'to be confirmed on WhatsApp', plusFee: '+ delivery fee', freeFrom: 'Free delivery from',
+  locBtn: '📍 Use my current location', locOk: 'Location added', locDenied: 'Location not shared. Please type your address instead.', locNo: 'Location is not available on this device.',
+  addrLbl: 'Delivery address (area, street, landmark)', badAddr: 'Add your address (area, street) or share your location.' });
+Object.assign(I18N.ar, { loading: 'نحضّر لكم التمور', slow: 'الخادم يستيقظ، بضع ثوان فقط…', loadFail: 'مشكل في الاتصال. تحقق من الإنترنت وأعد المحاولة.', retry: 'إعادة المحاولة',
+  boxNote: 'يُباع في علب وزن 2 كغ', prepInfo: 'يتم تحضير طلبك في يوم واحد (يومين كحد أقصى). مدة التوصيل وثمنه يختلفان حسب مدينتك.',
+  cinLbl: 'رقم البطاقة الوطنية — اختياري', cinNote: 'اختياري. إذا لم تدخله الآن، المرجو إرساله إلينا عبر واتساب بعد الطلب.',
+  cinAfter: 'المرجو إرسال رقم بطاقتك الوطنية إلينا عبر واتساب لإتمام الطلب.', cinWa: '💬 إرسال رقم البطاقة عبر واتساب', cinMsg: 'مرحبا، هذا رقم بطاقتي الوطنية للطلب',
+  need: 'أدخل الاسم الكامل.', cityLbl: 'المدينة', cityPick: 'اختر مدينتك', badCity: 'المرجو اختيار المدينة.', etaLbl: 'مدة التوصيل المتوقعة',
+  subLbl: 'المنتجات', feeLbl: 'التوصيل', totLbl: 'المجموع', feeFree: 'مجاني', feeTbd: 'سيتم تأكيده عبر واتساب', plusFee: '+ ثمن التوصيل', freeFrom: 'توصيل مجاني ابتداء من',
+  locBtn: '📍 استعمال موقعي الحالي', locOk: 'تمت إضافة الموقع', locDenied: 'لم تتم مشاركة الموقع. المرجو كتابة العنوان.', locNo: 'خدمة الموقع غير متوفرة على هذا الجهاز.',
+  addrLbl: 'عنوان التسليم (الحي، الشارع، علامة مميزة)', badAddr: 'أضف عنوانك (الحي، الشارع) أو شارك موقعك.' });
 let lang = localStorage.getItem('lang'); if (!I18N[lang]) lang = 'fr';
 const t = (k) => I18N[lang][k] || k, $ = (s) => document.querySelector(s);
 const dh = (n) => lang === 'ar' ? `${n} درهم` : `${n} DH`;
@@ -82,9 +110,33 @@ function applyLang() {
 const promoText = (p) => p.old ? `<span class="old">${dh(p.old)}</span><span class="badge"><bdi dir="ltr">-${pct(p)}%</bdi></span><br><span class="until">${t('until')} <bdi dir="ltr">${p.until.split('-').reverse().join('/')}</bdi></span>` : '';
 const isPromo = (p) => p.old && new Date() <= new Date(p.until + 'T23:59:59');
 const unit = (p) => isPromo(p) ? p.price : (p.old || p.price);
-document.addEventListener('DOMContentLoaded', () => ready.then(layout));
+document.addEventListener('DOMContentLoaded', () => ready.then(layout).finally(hideLoader));
 window.addEventListener('scroll', () => { const h = $('#header'); if (h) { if (scrollY > 60) h.classList.add('small'); else if (scrollY < 20) h.classList.remove('small'); }; });
 const pct = (p) => isPromo(p) ? Math.round((1 - p.price / p.old) * 100) : 0;
 
 // anonymous customer ID: same ID on this browser's comments and orders
 const cid = () => { let c = localStorage.getItem('cid'); if (!c) { c = 'C-' + Math.random().toString(36).slice(2, 8).toUpperCase(); localStorage.setItem('cid', c); } return c; };
+
+// ===== waiting screen (palm tree + falling dates). Appears only if loading takes more than 0.4 s =====
+const LOADER_SVG = `<svg class="ld-svg" viewBox="0 0 160 190" aria-hidden="true">
+  <path d="M42 168 Q80 196 118 168 Z" fill="#c98a12"/><path d="M42 168 Q80 180 118 168" fill="none" stroke="#f6d27a" stroke-width="4" stroke-linecap="round"/>
+  <path d="M80 150 C76 124 84 96 80 64" stroke="#7a4a21" stroke-width="9" fill="none" stroke-linecap="round"/>
+  <g class="fronds" stroke="#3f7d3a" stroke-width="6" fill="none" stroke-linecap="round"><path d="M80 64 Q50 40 16 58"/><path d="M80 64 Q56 30 30 24"/><path d="M80 64 Q80 28 80 12"/><path d="M80 64 Q104 30 130 24"/><path d="M80 64 Q110 40 144 58"/></g>
+  <g fill="#6b3a12"><ellipse cx="72" cy="72" rx="4.5" ry="7"/><ellipse cx="80" cy="76" rx="4.5" ry="7"/><ellipse cx="88" cy="72" rx="4.5" ry="7"/></g>
+  <ellipse class="dt d1" cx="64" cy="70" rx="5" ry="8" fill="#6b3a12"/><ellipse class="dt d2" cx="82" cy="70" rx="5" ry="8" fill="#8a4b17"/><ellipse class="dt d3" cx="98" cy="70" rx="5" ry="8" fill="#6b3a12"/></svg>`;
+let ldEl = null, ldTimer = 0, ldSlow = 0;
+function mkLoader() {
+  if (ldEl) return;
+  ldEl = document.createElement('div'); ldEl.className = 'ld';
+  ldEl.innerHTML = `${LOADER_SVG}<p class="ld-t">${t('loading')}<span class="dots"></span></p><p class="ld-s"></p>`;
+  document.body.appendChild(ldEl);
+  ldSlow = setTimeout(() => { const s = ldEl && ldEl.querySelector('.ld-s'); if (s) s.textContent = t('slow'); }, 8000);
+}
+function showLoader() { ldTimer = setTimeout(mkLoader, 400); }
+function hideLoader() {
+  clearTimeout(ldTimer); clearTimeout(ldSlow);
+  if (LOAD_FAILED) { mkLoader(); clearTimeout(ldSlow); ldEl.innerHTML = `<p class="ld-t">⚠️ ${t('loadFail')}</p><button class="cta ld-btn" onclick="location.reload()">${t('retry')}</button>`; return; }
+  if (!ldEl) return;
+  const el = ldEl; ldEl = null; el.classList.add('out'); setTimeout(() => el.remove(), 400);
+}
+showLoader();

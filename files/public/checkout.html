@@ -14,30 +14,54 @@
         <div class="steps"><span class="done" data-i="s1"></span><span class="on" data-i="s2"></span><span data-i="s3"></span></div>
         <h1 data-i="checkout"></h1>
         <p id="sum"></p>
+        <p class="info" data-i="prepInfo"></p>
+
         <label data-i="fullName"></label>
         <input id="nm" autocomplete="name" />
-        <label data-i="cin"></label>
+
+        <label data-i="cinLbl"></label>
         <input id="cin" />
+        <p class="note" data-i="cinNote"></p>
+
+        <label data-i="cityLbl"></label>
+        <select id="city"></select>
+        <p id="cityErr" class="field-err"></p>
+        <p class="note" id="etaEl" style="margin-top:-6px"></p>
+
         <label data-i="addrLbl"></label>
         <input id="ad" autocomplete="street-address" />
         <p id="adErr" class="field-err"></p>
+        <button type="button" class="locbtn" id="locBtn" data-i="locBtn"></button>
+        <p class="locmsg" id="locMsg"></p>
+
         <label data-i="phone"></label>
         <input id="ph" type="tel" inputmode="numeric" maxlength="10" placeholder="0680719510" autocomplete="tel" />
         <p id="phErr" class="field-err"></p>
+
         <label data-i="email"></label>
         <input id="em" type="email" placeholder="example@gmail.com" autocomplete="email" />
         <p id="emErr" class="field-err"></p>
+
+        <input id="hp" class="hp" tabindex="-1" autocomplete="off" aria-hidden="true" />
+
+        <div class="calc" id="calcBox"></div>
+        <p class="note" id="freeHint" style="margin-top:-8px"></p>
+
         <p class="save" data-i="trust"></p>
         <p id="err" style="color:#c0392b"></p>
         <button class="cta" id="ok" data-i="confirm"></button>
       </div>
+
       <div class="modal" id="ty">
         <div>
           <button class="x" id="cl">×</button>
           <div class="tick">✓</div>
           <p id="refEl" class="refno"></p>
+          <p id="totEl" style="font-weight:bold;margin:0 0 4px"></p>
           <p id="cuEl" class="cuno"></p>
           <p style="font-size:1.2rem" data-i="thanks"></p>
+          <p class="info" id="cinAfter" hidden></p>
+          <a class="wa-btn" id="cinWa" hidden target="_blank" rel="noopener"></a>
         </div>
       </div>
     </main>
@@ -46,20 +70,55 @@
     <script>
       const o = JSON.parse(sessionStorage.getItem('order') || 'null');
       if (!o) location.href = 'index.html';
-      window.onLang = () => { sum.textContent = o ? `\u2068${o.product}\u2069 × ${o.qty} = \u2068${dh(o.total)}\u2069` : ''; };
+      const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+      let D = { free_from: 0, cities: [] }, loc = null;
+      const cityName = c => (lang === 'ar' && c.name_ar) ? c.name_ar : c.name;
+      const cur = () => D.cities.find(c => String(c.id) === city.value);
+
+      function fillCities() {
+        const keep = city.value;
+        city.innerHTML = `<option value="">${esc(t('cityPick'))}</option>` + D.cities.map(c => `<option value="${c.id}">${esc(cityName(c))}</option>`).join('');
+        city.value = keep;
+      }
+      // the server calculates the final price; this is the same rule, shown to the customer before ordering
+      function calc() {
+        const sub = o ? o.total : 0, c = cur(), free = D.free_from > 0 && sub >= D.free_from;
+        const fee = free ? 0 : (c && c.fee != null ? c.fee : null);
+        const feeTxt = fee === 0 ? t('feeFree') : fee != null ? dh(fee) : c ? t('feeTbd') : '—';
+        const totTxt = dh(sub + (fee || 0)) + (fee == null && c ? ' ' + t('plusFee') : '');
+        calcBox.innerHTML = `<div><span>${t('subLbl')}</span><b>${dh(sub)}</b></div><div><span>${t('feeLbl')}</span><b>${feeTxt}</b></div><div class="tot"><span>${t('totLbl')}</span><b>${totTxt}</b></div>`;
+        etaEl.textContent = c && c.eta ? `🕒 ${t('etaLbl')}: ${c.eta}` : '';
+        freeHint.textContent = D.free_from > 0 ? (free ? `🎉 ${t('feeLbl')}: ${t('feeFree')}` : `🎁 ${t('freeFrom')} ${dh(D.free_from)}`) : '';
+      }
+      window.onLang = () => { sum.textContent = o ? `\u2068${o.product}\u2069 × ${o.qty} = \u2068${dh(o.total)}\u2069` : ''; fillCities(); calc(); };
+      fetch('/api/delivery').then(r => r.json()).then(d => { D = d; fillCities(); calc(); }).catch(() => {});
 
       const mark = (el, box, msg) => { box.textContent = msg; el.classList.toggle('input-err', !!msg); return !msg; };
-      const vAddr = () => mark(ad, adErr, ad.value.trim().length >= 6 ? '' : t('badAddr'));
+      const vCity = () => mark(city, cityErr, city.value ? '' : t('badCity'));
+      const vAddr = () => mark(ad, adErr, loc || ad.value.trim().length >= 6 ? '' : t('badAddr'));
       const vPhone = () => mark(ph, phErr, /^0\d{9}$/.test(ph.value) ? '' : t('badPhone'));
       const vEmail = () => { const v = em.value.trim(); return mark(em, emErr, !v || /^\S+@\S+\.\S+$/.test(v) ? '' : t('badEmail')); };
+      city.onchange = () => { if (cityErr.textContent) vCity(); calc(); };
       ph.oninput = () => { ph.value = ph.value.replace(/\D/g, '').slice(0, 10); if (phErr.textContent) vPhone(); };
       em.oninput = () => { if (emErr.textContent) vEmail(); };
       ad.oninput = () => { if (adErr.textContent) vAddr(); };
 
+      // "Use my current location": the browser asks permission, then we keep the coordinates (shown to the delivery man as a map link)
+      locBtn.onclick = () => {
+        if (!navigator.geolocation) { locMsg.style.color = '#c0392b'; locMsg.textContent = t('locNo'); return; }
+        locBtn.disabled = true; locMsg.style.color = '#8a5a14'; locMsg.textContent = '…';
+        navigator.geolocation.getCurrentPosition(p => {
+          loc = { lat: +p.coords.latitude.toFixed(6), lng: +p.coords.longitude.toFixed(6) };
+          locBtn.disabled = false; locMsg.style.color = '#1e8449'; locMsg.textContent = '✔ ' + t('locOk');
+          if (adErr.textContent) vAddr();
+        }, () => { loc = null; locBtn.disabled = false; locMsg.style.color = '#c0392b'; locMsg.textContent = t('locDenied'); }, { enableHighAccuracy: true, timeout: 12000 });
+      };
+
       ok.onclick = async () => {
         err.textContent = '';
-        if (!nm.value.trim() || !cin.value.trim()) { err.textContent = t('need'); return; }
-        const a = vAddr(), p = vPhone(), m = vEmail();
+        if (!nm.value.trim()) { err.textContent = t('need'); nm.focus(); return; }
+        const c = vCity(), a = vAddr(), p = vPhone(), m = vEmail();
+        if (!c) { city.focus(); return; }
         if (!a) { ad.focus(); return; }
         if (!p) { ph.focus(); return; }
         if (!m) { em.focus(); return; }
@@ -67,13 +126,20 @@
         try {
           const r = await fetch('/api/orders', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ product_id: o.id, product: o.product, qty: o.qty, total: o.total, name: nm.value, cin: cin.value, address: ad.value, phone: ph.value, email: em.value, lang, customer_id: cid() })
+            body: JSON.stringify({ product_id: o.id, qty: o.qty, name: nm.value, cin: cin.value, city_id: Number(city.value), address: ad.value, lat: loc ? loc.lat : null, lng: loc ? loc.lng : null,
+              phone: ph.value, email: em.value, lang, customer_id: cid(), website: hp.value })
           });
           if (!r.ok) throw 0;
           const d = await r.json();
           sessionStorage.removeItem('order');
           refEl.textContent = `${t('orderNo')} ${d.ref || ''}`;
+          totEl.textContent = d.total != null ? `${t('totLbl')}: ${dh(d.total)}${d.fee == null ? ' ' + t('plusFee') : ''}` : '';
           cuEl.textContent = `${t('custNo')} ${cid()}`;
+          if (!cin.value.trim()) { // CIN is optional: ask the customer to send it on WhatsApp
+            cinAfter.textContent = t('cinAfter'); cinAfter.hidden = false;
+            cinWa.textContent = t('cinWa'); cinWa.hidden = false;
+            cinWa.href = `https://wa.me/${COMPANY.wa}?text=${encodeURIComponent(t('cinMsg') + ' ' + (d.ref || '') + ' : ')}`;
+          }
           ty.classList.add('show');
         } catch {
           ok.disabled = false; ok.style.opacity = 1; err.textContent = t('fail');
@@ -82,7 +148,7 @@
 
       // Enter key = Confirm order
       document.addEventListener('keydown', e => {
-        if (e.key === 'Enter' && !e.isComposing && !['BUTTON', 'A'].includes(e.target.tagName)) { e.preventDefault(); ok.click(); }
+        if (e.key === 'Enter' && !e.isComposing && !['BUTTON', 'A', 'SELECT'].includes(e.target.tagName)) { e.preventDefault(); ok.click(); }
       });
       cl.onclick = () => (location.href = 'index.html');
     </script>
