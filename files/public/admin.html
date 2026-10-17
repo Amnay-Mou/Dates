@@ -163,6 +163,9 @@
     .st-failed{background:#fdecea}.st-cancelled{background:#e0e0e0}
     .ot tr.fl td{background:#fdecea!important}.ot tr.cx td{background:#eee!important;opacity:.75}
     .xbtns{display:grid;gap:12px;max-width:520px;margin:16px 0}.ot a{color:#8a5a14;font-weight:bold}
+    .xgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin:16px 0}
+    .xcard{background:#fff;border:1px solid #e5d3a5;border-radius:14px;padding:16px}.xcard h3{margin:0 0 6px}.xcard p{margin:0 0 12px;font-size:.85rem;color:#5c3418}
+    .xb{display:flex;gap:8px;flex-wrap:wrap}
   </style>
 </head>
 <body>
@@ -554,34 +557,57 @@
       };
     }
 
-    // ---------- Export: 3 CSV files ----------
+    // ---------- Export: 3 files -> download, share (WhatsApp, Telegram... from a phone), or send on Telegram ----------
+    const XT = {
+      admin: ['📥 Admin file', 'Everything: all columns and all client details.'],
+      warehouse: ['📦 Warehouse file', 'Only what to prepare. No client data.'],
+      delivery: ['🚚 Delivery file', 'Client, phone, city, address, location link and amount.']
+    };
     function exportTab() {
-      v.innerHTML = `<h2>Export orders (CSV)</h2>
-        <p class="hint">Files open in Excel or Google Sheets. Pick the orders you want (or leave everything empty for all), then click one of the three files.
-          <b>Admin</b> = everything · <b>Warehouse</b> = only what to prepare (no client data) · <b>Delivery</b> = client, phone, address, location and amount.</p>
+      v.innerHTML = `<h2>Export orders</h2>
+        <p class="hint">Choose the orders (or leave everything empty for all), then <b>download</b> a file, <b>share</b> it (on a phone the share list shows WhatsApp, Telegram, email…), or <b>send it on Telegram</b> straight from here. The warehouse file goes to the warehouse team and the delivery file to the delivery team.</p>
         <div class="row"><label>From<input id="xf" type="date"></label><label>To<input id="xt" type="date"></label></div>
-        <label>Orders status<select id="xs"><option value="">All orders</option>${Object.entries(STATUS_LBL).map(([k, lab]) => `<option value="${k}">${lab}</option>`).join('')}</select></label>
-        <div class="xbtns">
-          <button class="cta" data-x="admin">📥 Admin file (everything)</button>
-          <button class="cta" data-x="warehouse">📦 Warehouse file</button>
-          <button class="cta" data-x="delivery">🚚 Delivery file</button>
-        </div><p class="msg" id="xm"></p>`;
+        <div class="row"><label>Orders status<select id="xs"><option value="">All orders</option>${Object.entries(STATUS_LBL).map(([k, lab]) => `<option value="${k}">${lab}</option>`).join('')}</select></label>
+          <label>File format<select id="xd"><option value=",">CSV with commas (Excel English, Google Sheets, phone)</option><option value=";">CSV with semicolons (Excel with French / Arabic settings)</option></select></label></div>
+        <label class="chk"><input type="checkbox" id="xc" checked> Telegram: also send me a copy of the team files</label>
+        <div class="xgrid">${Object.entries(XT).map(([k, [ti, de]]) => `<div class="xcard"><h3>${ti}</h3><p>${de}</p>
+          <div class="xb"><button class="cn" data-a="dl" data-x="${k}">⬇️ Download</button><button class="cn" data-a="sh" data-x="${k}">📤 Share</button><button class="cn" data-a="tg" data-x="${k}">✈️ Telegram</button></div></div>`).join('')}</div>
+        <div id="xm" class="msg"></div>`;
+      $('#xd').value = localStorage.getItem('xsep') || ',';
+      $('#xd').onchange = () => localStorage.setItem('xsep', $('#xd').value);
       v.onchange = null;
+
+      const params = type => ({ type, status: $('#xs').value, from: $('#xf').value, to: $('#xt').value, sep: $('#xd').value });
+      const nameOf = type => `orders-${type}-${new Date().toISOString().slice(0, 10)}.csv`;
+      const say = (html, bad) => { $('#xm').innerHTML = html; $('#xm').style.color = bad ? '#c0392b' : '#1e8449'; };
+      const save = (blob, name) => { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 3000); };
+      const getCsv = async type => {
+        const r = await fetch('/api/admin/export?' + new URLSearchParams(params(type)), { headers: { 'x-token': tok || '' } });
+        if (r.status === 401) { logout(); throw 0; }
+        if (!r.ok) throw new Error('Export failed');
+        return r.blob();
+      };
+
       v.onclick = async e => {
-        const type = e.target.dataset.x;
+        const type = e.target.dataset.x, act = e.target.dataset.a;
         if (!type) return;
-        const q = new URLSearchParams({ type, status: $('#xs').value, from: $('#xf').value, to: $('#xt').value });
         try {
-          const r = await fetch('/api/admin/export?' + q, { headers: { 'x-token': tok || '' } });
-          if (r.status === 401) return logout();
-          if (!r.ok) throw new Error('Export failed');
-          const a = document.createElement('a');
-          a.href = URL.createObjectURL(await r.blob());
-          a.download = `orders-${type}-${new Date().toISOString().slice(0, 10)}.csv`;
-          document.body.appendChild(a); a.click(); a.remove();
-          setTimeout(() => URL.revokeObjectURL(a.href), 3000);
-          $('#xm').textContent = '✅ Downloaded: ' + a.download;
-        } catch (er) { $('#xm').textContent = '⚠️ ' + er.message; }
+          if (act === 'dl') { const name = nameOf(type); save(await getCsv(type), name); say('✅ Downloaded: ' + esc(name)); }
+          else if (act === 'sh') {
+            const name = nameOf(type), file = new File([await getCsv(type)], name, { type: 'text/csv' });
+            if (!(navigator.canShare && navigator.canShare({ files: [file] }))) { save(file, name); say('ℹ️ This browser cannot share files directly (it works on phones). The file was downloaded: attach it in WhatsApp or Telegram.'); return; }
+            try { await navigator.share({ files: [file], title: name }); say('✅ Shared'); }
+            catch (er) {
+              if (er.name === 'AbortError') return;
+              say(`<button class="cta" id="xgo" style="width:auto;padding:10px 22px;font-size:1rem">📤 Tap here to share ${esc(name)}</button>`);
+              $('#xgo').onclick = () => navigator.share({ files: [file], title: name }).then(() => say('✅ Shared')).catch(() => {});
+            }
+          } else if (act === 'tg') {
+            say('Sending on Telegram…');
+            const r = await api('/api/admin/export/telegram', 'POST', { ...params(type), copy: $('#xc').checked });
+            say(`${r.count} order(s):<br>` + r.results.map(x => (x.ok ? '✅ ' : '⚠️ ') + esc(x.name) + (x.ok ? '' : ': ' + esc(x.error) + (/initiate|chat not found/i.test(x.error) ? ' (the person must open your bot and press Start)' : ''))).join('<br>'), r.results.some(x => !x.ok));
+          }
+        } catch (er) { if (er) say('⚠️ ' + esc(er.message), true); }
       };
     }
 

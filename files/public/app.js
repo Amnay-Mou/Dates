@@ -1,7 +1,7 @@
 // ===== EDIT YOUR COMPANY + PRODUCTS HERE =====
 const COMPANY = { name: 'Filali Dates', wa: '212696171655', phone: '+212 696 171 655', email: 'contact@filali-dates.ma', owner: 'Your Name',
   address: { fr: '12 Rue des Oliviers, Meknès, Maroc', en: '12 Olive Street, Meknes, Morocco', ar: 'شارع الزيتون 12، مكناس، المغرب' },
-  social: { WhatsApp: 'https://wa.me/212696171655' } }; // add Facebook / Instagram / TikTok links here when the accounts exist
+  social: { Facebook: 'https://facebook.com/', WhatsApp: 'https://wa.me/212696171655', Instagram: 'https://instagram.com/', TikTok: 'https://tiktok.com/' } }; // replace the Facebook / Instagram / TikTok links with your real page links
 let PRODUCTS = [], LOAD_FAILED = false;
 const ready = fetch('/api/products').then(r => { if (!r.ok) throw 0; return r.json(); }).then(rows => { PRODUCTS = rows.map(r => ({ id: r.id, price: r.price, old: r.old_price, until: r.until || '',
   imgs: r.images.length ? r.images : ['images/none.svg'], name: { fr: r.name_fr, en: r.name_en, ar: r.name_ar || r.name_en }, desc: { fr: r.desc_fr, en: r.desc_en, ar: r.desc_ar || r.desc_en } })); })
@@ -80,6 +80,9 @@ Object.assign(I18N.ar, { loading: 'نحضّر لكم التمور', slow: 'ال�
   subLbl: 'المنتجات', feeLbl: 'التوصيل', totLbl: 'المجموع', feeFree: 'مجاني', feeTbd: 'سيتم تأكيده عبر واتساب', plusFee: '+ ثمن التوصيل', freeFrom: 'توصيل مجاني ابتداء من',
   locBtn: '📍 استعمال موقعي الحالي', locOk: 'تمت إضافة الموقع', locDenied: 'لم تتم مشاركة الموقع. المرجو كتابة العنوان.', locNo: 'خدمة الموقع غير متوفرة على هذا الجهاز.',
   addrLbl: 'عنوان التسليم (الحي، الشارع، علامة مميزة)', badAddr: 'أضف عنوانك (الحي، الشارع) أو شارك موقعك.' });
+Object.assign(I18N.fr, { shareLbl: 'Partager', shareTitle: 'Partager ce produit', copyLink: 'Copier le lien', copied: 'Lien copié ✔', cmThanks: 'Merci pour votre commentaire ! ✔', cmNeed: 'Écrivez votre nom et votre commentaire.' });
+Object.assign(I18N.en, { shareLbl: 'Share', shareTitle: 'Share this product', copyLink: 'Copy link', copied: 'Link copied ✔', cmThanks: 'Thank you for your comment! ✔', cmNeed: 'Please enter your name and your comment.' });
+Object.assign(I18N.ar, { shareLbl: 'مشاركة', shareTitle: 'شارك هذا المنتج', copyLink: 'نسخ الرابط', copied: 'تم نسخ الرابط ✔', cmThanks: 'شكرا على تعليقك! ✔', cmNeed: 'المرجو كتابة اسمك وتعليقك.' });
 let lang = localStorage.getItem('lang'); if (!I18N[lang]) lang = 'fr';
 const t = (k) => I18N[lang][k] || k, $ = (s) => document.querySelector(s);
 const dh = (n) => lang === 'ar' ? `${n} درهم` : `${n} DH`;
@@ -94,7 +97,7 @@ function layout() {
   document.body.insertAdjacentHTML('beforeend', `<div class="modal" id="cModal"><div><button class="x" onclick="this.closest('.modal').classList.remove('show')">×</button>
   <h3 data-i="contact"></h3><p>📞 <bdi dir="ltr">${COMPANY.phone}</bdi></p><p>✉️ <bdi dir="ltr">${COMPANY.email}</bdi></p></div></div>`);
   $('#cBtn').onclick = () => $('#cModal').classList.add('show');
-  document.title = COMPANY.name;
+  if (!document.title) document.title = COMPANY.name; // product pages already carry the product name in the title
   document.body.insertAdjacentHTML('beforeend', `<a class="wa-float" href="https://wa.me/${COMPANY.wa}" target="_blank" rel="noopener" aria-label="WhatsApp">💬</a>`);
   document.querySelectorAll('[data-l]').forEach(b => b.onclick = () => { lang = b.dataset.l; localStorage.setItem('lang', lang); applyLang(); });
   applyLang();
@@ -140,3 +143,22 @@ function hideLoader() {
   const el = ldEl; ldEl = null; el.classList.add('out'); setTimeout(() => el.remove(), 400);
 }
 showLoader();
+
+// ===== share a product: phone = native share sheet; computer = small window (WhatsApp / Telegram / Facebook / copy link) =====
+const SHARE_SVG = `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92s2.92-1.31 2.92-2.92-1.31-2.92-2.92-2.92z"/></svg>`;
+const escH = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+function shareProduct(p) {
+  const url = `${location.origin}/product.html?id=${encodeURIComponent(p.id)}`, name = p.name[lang], text = `${name} — ${dh(unit(p))} | ${COMPANY.name}`, enc = encodeURIComponent;
+  if (navigator.share && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) { navigator.share({ title: name, text, url }).catch(() => {}); return; }
+  const old = $('#shModal'); if (old) old.remove();
+  document.body.insertAdjacentHTML('beforeend', `<div class="modal show" id="shModal"><div class="sharebox"><button class="x" type="button" aria-label="Close">×</button>
+    <h3>${t('shareTitle')}</h3><p class="sh-name">${escH(name)}</p>
+    <div class="sh-grid"><a class="sh-wa" target="_blank" rel="noopener" href="https://wa.me/?text=${enc(text + '\n' + url)}">WhatsApp</a>
+    <a class="sh-tg" target="_blank" rel="noopener" href="https://t.me/share/url?url=${enc(url)}&text=${enc(text)}">Telegram</a>
+    <a class="sh-fb" target="_blank" rel="noopener" href="https://www.facebook.com/sharer/sharer.php?u=${enc(url)}">Facebook</a>
+    <button class="sh-cp" type="button">🔗 ${t('copyLink')}</button></div></div></div>`);
+  const m = $('#shModal');
+  m.onclick = e => { if (e.target === m || e.target.classList.contains('x')) m.remove(); };
+  m.querySelector('.sh-cp').onclick = async e => { try { await navigator.clipboard.writeText(url); } catch { prompt(t('copyLink'), url); return; } e.target.textContent = t('copied'); };
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { const m = $('#shModal'); if (m) m.remove(); } });

@@ -61,6 +61,20 @@ initDb().catch(console.error);
 app.use('/api/admin/products', express.json({ limit: '25mb' })); // only the product form sends photos
 app.use(express.json({ limit: '50kb' })); // everything else stays small 
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'welcome.html')));
+// product link previews: when a product link is shared, WhatsApp / Facebook / Telegram show its photo, name and price
+const hAttr = s => String(s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+function ogTags(p, base) {
+  const first = JSON.parse(p.images || '[]')[0] || '/images/logo.png', img = /^https?:/.test(first) ? first : base + (first.startsWith('/') ? first : '/' + first);
+  const title = `${p.name_fr}${p.name_ar ? ' — ' + p.name_ar : ''} | Filali Dates`, desc = `${unitPrice(p)} DH — ${clean(p.desc_fr || p.desc_en, 140)}`;
+  return `<title>${hAttr(title)}</title><meta name="description" content="${hAttr(desc)}"><meta property="og:type" content="product"><meta property="og:site_name" content="Filali Dates"><meta property="og:title" content="${hAttr(title)}"><meta property="og:description" content="${hAttr(desc)}"><meta property="og:image" content="${hAttr(img)}"><meta property="og:url" content="${hAttr(base + '/product.html?id=' + encodeURIComponent(p.id))}"><meta name="twitter:card" content="summary_large_image">`;
+}
+let productTpl = null;
+app.get('/product.html', async (req, res, next) => {
+  const p = (await db.execute({ sql: 'SELECT * FROM products WHERE id=?', args: [clean(req.query.id, 80)] })).rows[0];
+  if (!p) return next();
+  productTpl = productTpl || fs.readFileSync(path.join(__dirname, 'public', 'product.html'), 'utf8');
+  res.type('html').send(productTpl.replace('<title>Filali Dates</title>', ogTags(p, baseUrl(req))));
+});
 app.use(express.static(path.join(__dirname, 'public')));
 
 const clean = (s, n = 300) => String(s || '').trim().slice(0, n);
@@ -86,7 +100,7 @@ const getFreeFrom = async () => Number(((await db.execute({ sql: 'SELECT value F
 
 // ===== CSV export helpers =====
 const csvCell = v => { let s = String(v ?? ''); if (/^[=+\-@\t\r]/.test(s)) s = "'" + s; return '"' + s.replace(/"/g, '""') + '"'; }; // the quote blocks Excel formula injection
-const csvText = v => '="' + String(v ?? '').replace(/[^0-9A-Za-z +]/g, '') + '"'; // keeps the leading 0 of phone numbers in Excel
+const csvText = v => '"=""' + String(v ?? '').replace(/[^0-9A-Za-z +]/g, '') + '"""'; // a properly quoted field that Excel reads as text, so phone numbers keep their leading 0
 const fmtDate = iso => iso ? new Date(iso).toLocaleString('sv-SE', { timeZone: 'Africa/Casablanca' }) : '';
 const STATUS_NAME = { waiting: 'Waiting', ready: 'Prepared', delivering: 'On the way', delivered: 'Delivered', failed: 'Failed delivery', cancelled: 'Cancelled' };
 const nextDay = d => new Date(Date.parse(d) + 864e5).toISOString().slice(0, 10);
@@ -493,16 +507,44 @@ app.put('/api/admin/cities/:id', auth, async (req, res) => {
 app.delete('/api/admin/cities/:id', auth, async (req, res) => { await db.execute({ sql: 'DELETE FROM cities WHERE id=?', args: [Number(req.params.id)] }); res.json({ ok: true }); });
 
 // ===== CSV EXPORT: 3 files (admin = everything, warehouse = what to prepare, delivery = where to deliver) =====
-app.get('/api/admin/export', auth, async (req, res) => {
-  const type = CSV_COLS[req.query.type] ? req.query.type : 'admin', where = [], args = [], q = req.query;
+// builds the CSV text for one of the 3 files. Separator: comma (Excel English, Google Sheets, phones) or semicolon (Excel with French / Arabic regional settings)
+async function buildExport(q) {
+  const type = CSV_COLS[q.type] ? q.type : 'admin', sep = q.sep === ';' ? ';' : ',', where = [], args = [];
   if (STATUS.includes(q.status)) { where.push(q.status === 'waiting' ? "(status='waiting' OR status IS NULL)" : 'status=?'); if (q.status !== 'waiting') args.push(q.status); }
   if (/^\d{4}-\d{2}-\d{2}$/.test(q.from || '')) { where.push('created_at>=?'); args.push(q.from); }
   if (/^\d{4}-\d{2}-\d{2}$/.test(q.to || '')) { where.push('created_at<?'); args.push(nextDay(q.to)); }
   const rows = (await db.execute({ sql: `SELECT * FROM orders ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY id DESC`, args })).rows;
   const cols = CSV_COLS[type];
-  const lines = [cols.map(c => csvCell(c[0])).join(';'), ...rows.map(o => cols.map(c => c[2] ? csvText(c[1](o)) : csvCell(c[1](o))).join(';'))];
-  res.set({ 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="orders-${type}-${new Date().toISOString().slice(0, 10)}.csv"` });
-  res.send('\uFEFF' + lines.join('\r\n')); // BOM so Excel shows Arabic / accents correctly
+  const lines = [cols.map(c => csvCell(c[0])).join(sep), ...rows.map(o => cols.map(c => c[2] ? csvText(c[1](o)) : csvCell(c[1](o))).join(sep))];
+  return { type, count: rows.length, name: `orders-${type}-${new Date().toISOString().slice(0, 10)}.csv`, csv: '\uFEFF' + lines.join('\r\n') }; // BOM = Arabic / accents display correctly
+}
+app.get('/api/admin/export', auth, async (req, res) => {
+  const x = await buildExport(req.query);
+  res.set({ 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="${x.name}"` });
+  res.send(x.csv);
+});
+// who receives a file on Telegram: warehouse file -> warehouse team, delivery file -> delivery team, admin file -> you (+ a copy for you if asked)
+async function exportTargets(type, copy, getTeam = staffOf, me = process.env.TELEGRAM_CHAT_ID) {
+  const role = { warehouse: 'warehouse', delivery: 'delivery' }[type], targets = new Map();
+  if (role) for (const s of await getTeam(role)) if (s.telegram_chat_id) targets.set(String(s.telegram_chat_id), s.name);
+  if (me && (!role || copy)) targets.set(String(me), targets.get(String(me)) || 'You (admin)');
+  return targets;
+}
+async function sendTelegramFile(chatId, name, text, caption) {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  if (!token) return { ok: false, error: 'TELEGRAM_BOT_TOKEN is missing in Render' };
+  try {
+    const fd = new FormData(); fd.append('chat_id', String(chatId)); fd.append('caption', caption); fd.append('document', new Blob([text], { type: 'text/csv' }), name);
+    const r = await fetch(`https://api.telegram.org/bot${token}/sendDocument`, { method: 'POST', body: fd }), j = await r.json().catch(() => ({}));
+    return { ok: r.ok && j.ok !== false, error: r.ok && j.ok !== false ? '' : (j.description || 'HTTP ' + r.status) };
+  } catch (e) { return { ok: false, error: e.message }; }
+}
+app.post('/api/admin/export/telegram', auth, async (req, res) => {
+  const b = req.body || {}, x = await buildExport(b), targets = await exportTargets(x.type, !!b.copy);
+  if (!targets.size) return res.status(400).json({ error: x.type === 'admin' ? 'TELEGRAM_CHAT_ID is missing in Render' : 'No Telegram chat ID found for this team. Add it in Admin → Team.' });
+  const caption = `${{ admin: '📥 Admin file', warehouse: '📦 Warehouse file', delivery: '🚚 Delivery file' }[x.type]} — ${x.count} order(s) — ${x.name}`;
+  const results = await Promise.all([...targets].map(async ([chat, name]) => ({ name, ...(await sendTelegramFile(chat, x.name, x.csv, caption)) })));
+  res.json({ count: x.count, results });
 });
 
 // readable JSON errors (too big, bad JSON...) instead of an HTML page

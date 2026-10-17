@@ -1,0 +1,652 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Admin</title>
+  <link rel="icon" type="image/png" href="images/logo.png"><link rel="apple-touch-icon" href="images/logo.png"><link rel="stylesheet" href="style.css">
+  <style>
+    body {
+      background: #f3ead6;
+    }
+    body::before {
+      display: none;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #fff;
+    }
+    td, th {
+      padding: 8px;
+      border-bottom: 1px solid #ddd;
+      text-align: left;
+      font-size: .9rem;
+    }
+    .tabs button {
+      padding: 10px 20px;
+      border: 0;
+      background: #e5d3a5;
+      cursor: pointer;
+      font: inherit;
+    }
+    .tabs .on {
+      background: #2f2013;
+      color: #fff8e7;
+    }
+    .sm {
+      padding: 5px 10px;
+      cursor: pointer;
+      margin-right: 4px;
+    }
+    .row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    .pv {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .pv div {
+      position: relative;
+    }
+    .pv img {
+      width: 80px;
+      height: 80px;
+      object-fit: cover;
+      border-radius: 8px;
+    }
+    .pv b {
+      position: absolute;
+      top: -6px;
+      right: -6px;
+      background: #c0392b;
+      color: #fff;
+      border-radius: 50%;
+      width: 20px;
+      height: 20px;
+      text-align: center;
+      cursor: pointer;
+    }
+    .scroll {
+      overflow-x: auto;
+    }
+    .acts {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-top: 6px;
+    }
+    .cn {
+      padding: 10px 24px;
+      border-radius: 30px;
+      border: 1px solid #bba57c;
+      background: #fff;
+      cursor: pointer;
+      font: inherit;
+    }
+    .cn:hover {
+      background: #f4e8c8;
+    }
+    .tp {
+      width: 56px;
+      height: 56px;
+      object-fit: cover;
+      border-radius: 8px;
+      display: block;
+    }
+    main {
+      width: min(1300px, 96%);
+    }
+    input[type=radio] {
+      width: auto;
+      margin: 0 6px 0 0;
+      padding: 0;
+    }
+    .ot {
+      border-radius: 12px;
+      box-shadow: 0 2px 10px rgba(0,0,0,.12);
+    }
+    .ot td, .ot th {
+      padding: 9px 7px;
+      font-size: .85rem;
+      vertical-align: middle;
+      word-break: break-word;
+    }
+    .ot th {
+      background: #5c3418;
+      color: #fff8e7;
+      font-size: .75rem;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+    }
+    .ot tr:nth-child(even) td {
+      background: #fbf5e6;
+    }
+    .ot tr:hover td {
+      background: #f4e8c8;
+    }
+    .ot tr.dn td {
+      background: #e3f4e6 !important;
+    }
+    .ot label {
+      display: block;
+      white-space: nowrap;
+      cursor: pointer;
+      line-height: 1.7;
+    }
+    .del {
+      background: #fff;
+      border: 1px solid #c0392b;
+      color: #c0392b;
+      border-radius: 8px;
+      padding: 6px 10px;
+      cursor: pointer;
+      font: inherit;
+      font-size: .8rem;
+    }
+    .del:hover {
+      background: #c0392b;
+      color: #fff;
+    }
+.invalid-email{color:#c0392b}.badge-err{color:#c0392b;font-size:.75rem;font-weight:bold}code{background:#f1e6c8;padding:1px 6px;border-radius:5px;font-size:.8rem}
+    select{width:100%;padding:8px;border:1px solid #bba57c;border-radius:8px;font:inherit}
+    select.st{width:auto;min-width:130px;font-weight:bold;font-size:.82rem}
+    .st-waiting{background:#fff3cd}.st-ready{background:#dbeafe}.st-delivering{background:#ffe5b4}.st-delivered{background:#d9efdc}
+    .tc{background:#fff;border:1px solid #e5d3a5;border-radius:14px;padding:18px}.tc h3{margin:0 0 10px}.tc label{display:block;font-size:.85rem;color:#5c3418}
+    .dg{padding:6px 10px;border-radius:8px;margin:4px 0;font-size:.88rem}.dg.ok{background:#e3f4e6}.dg.bad{background:#fdecea}
+    .tgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;margin-bottom:22px}.tc.off{opacity:.6}.tsec{display:flex;justify-content:space-between;align-items:center;gap:10px}
+    .chk{display:flex;align-items:center}input[type=checkbox]{width:auto;margin:0 8px 0 0}
+    .hint{background:#fff3cd;border-radius:10px;padding:10px 14px;font-size:.88rem}.msg{min-height:1.2em;margin:8px 0 0;font-size:.9rem}
+    .st-failed{background:#fdecea}.st-cancelled{background:#e0e0e0}
+    .ot tr.fl td{background:#fdecea!important}.ot tr.cx td{background:#eee!important;opacity:.75}
+    .xbtns{display:grid;gap:12px;max-width:520px;margin:16px 0}.ot a{color:#8a5a14;font-weight:bold}
+  </style>
+</head>
+<body>
+  <main>
+    <div class="panel" id="login" style="max-width:380px;margin:60px auto">
+      <h2>Admin</h2>
+      <input id="pw" type="password" placeholder="Password">
+      <button class="cta" id="go">Log in</button>
+      <p id="le" style="color:#c0392b"></p>
+    </div>
+
+    <div id="app" style="display:none">
+      <div class="tabs">
+        <button data-t="products" class="on">Products</button>
+        <button data-t="comments">Comments</button>
+        <button data-t="orders">Orders</button>
+        <button data-t="team">Team</button>
+        <button data-t="delivery">Delivery</button>
+        <button data-t="export">Export</button>
+        <button id="out" style="float:right">Log out</button>
+      </div>
+      <div class="panel" id="v"></div>
+    </div>
+  </main>
+
+  <script>
+    const $ = s => document.querySelector(s);
+    let tok = sessionStorage.getItem('tok'), tab = 'products', imgs = [], editId = null;
+
+    const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;'
+    }[c]));
+
+    async function api(u, m = 'GET', b) {
+      const r = await fetch(u, {
+        method: m,
+        headers: { 'Content-Type': 'application/json', 'x-token': tok || '' },
+        body: b ? JSON.stringify(b) : undefined
+      });
+      if (r.status === 401 && u !== '/api/admin/login') {
+        logout();
+        throw 0;
+      }
+      let d;
+      try {
+        d = await r.json();
+      } catch {
+        throw new Error('Old server running: stop it (Ctrl+C), run npm start, and open http://localhost:3000/admin.html');
+      }
+      if (!r.ok) throw new Error(d.error || 'Error');
+      return d;
+    }
+
+    function logout() {
+      sessionStorage.removeItem('tok');
+      tok = null;
+      login.style.display = 'block';
+      app.style.display = 'none';
+    }
+
+    function start() {
+      login.style.display = 'none';
+      app.style.display = 'block';
+      show();
+    }
+
+    go.onclick = async () => {
+      try {
+        tok = (await api('/api/admin/login', 'POST', { password: pw.value })).token;
+        sessionStorage.setItem('tok', tok);
+        start();
+      } catch (e) {
+        le.textContent = e.message;
+      }
+    };
+
+    out.onclick = logout;
+    pw.onkeydown = e => { if (e.key === 'Enter') go.click(); };
+
+    document.querySelectorAll('[data-t]').forEach(b => b.onclick = () => {
+      tab = b.dataset.t;
+      document.querySelectorAll('[data-t]').forEach(x => x.classList.toggle('on', x === b));
+      show();
+    });
+
+    const show = () => ({ products: prods, comments: comms, orders: ords, team: team, delivery: delivery, export: exportTab })[tab]();
+
+    const shrink = file => new Promise((res, rej) => {
+      const im = new Image(), u = URL.createObjectURL(file);
+      im.onload = () => {
+        const k = Math.min(1, 1400 / Math.max(im.width, im.height)), c = document.createElement('canvas');
+        c.width = Math.round(im.width * k); c.height = Math.round(im.height * k);
+        c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+        URL.revokeObjectURL(u); res(c.toDataURL('image/jpeg', 0.82));
+      };
+      im.onerror = () => rej(new Error('Bad image'));
+      im.src = u;
+    });
+
+    async function prods() {
+      const l = await api('/api/products');
+      v.innerHTML = `
+        <h2>${editId ? 'Edit product' : 'Add product'}</h2>
+        <div id="f"></div>
+        <h2>Products</h2>
+        <div class="scroll">
+          <table>
+            <tr><th></th><th>ID</th><th>Name</th><th>Price</th><th>Old</th><th>Until</th><th></th></tr>
+            ${l.map(p => `
+              <tr>
+                <td><img class="tp" src="${esc((p.images && p.images[0]) || '')}" onerror="this.style.visibility='hidden'"></td>
+                <td><code>${esc(p.id)}</code></td>
+                <td>${esc(p.name_en)} / ${esc(p.name_fr)}</td>
+                <td>${p.price}</td>
+                <td>${p.old_price || ''}</td>
+                <td>${esc(p.until || '')}</td>
+                <td>
+                  <button class="sm" data-e="${p.id}">Edit</button>
+                  <button class="sm" data-d="${p.id}">Delete</button>
+                </td>
+              </tr>
+            `).join('')}
+          </table>
+        </div>`;
+
+      const cur = l.find(p => p.id === editId) || {};
+      imgs = [...(cur.images || [])];
+
+      f.innerHTML = `
+        <div class="row">
+          <div>Name (EN)<input id="ne" value="${esc(cur.name_en || '')}"></div>
+          <div>Name (FR)<input id="nf" value="${esc(cur.name_fr || '')}"></div>
+          <div>Description (EN)<textarea id="de" rows="3">${esc(cur.desc_en || '')}</textarea></div>
+          <div>Description (FR)<textarea id="df" rows="3">${esc(cur.desc_fr || '')}</textarea></div>
+          <div>Name (AR)<input id="na" dir="rtl" value="${esc(cur.name_ar || '')}"></div>
+          <div>Description (AR)<textarea id="da" dir="rtl" rows="3">${esc(cur.desc_ar || '')}</textarea></div>
+          <div>Price (DH)<input id="pr" type="number" min="1" value="${cur.price || ''}"></div>
+          <div>Old price (DH, optional)<input id="op" type="number" value="${cur.old_price || ''}"></div>
+          <div>Promotion until<input id="un" type="date" value="${cur.until || ''}"></div>
+          <div>Pictures (max 8)<input id="fi" type="file" accept="image/*" multiple></div>
+        </div>
+        <div class="pv" id="pv"></div>
+        <p id="fe" style="color:#c0392b"></p>
+        <div class="acts">
+          <button class="cta" id="savep" style="width:auto;padding:10px 30px;font-size:1rem">${editId ? 'Save changes' : 'Add product'}</button>
+          ${editId ? '<button class="cn" id="cn">Cancel</button>' : ''}
+        </div>`;
+
+      const pv = () => {
+        $('#pv').innerHTML = imgs.map((s, i) => `<div><img src="${esc(s)}"><b data-r="${i}">×</b></div>`).join('');
+      };
+      pv();
+
+      $('#pv').onclick = e => {
+        if (e.target.dataset.r !== undefined) {
+          imgs.splice(+e.target.dataset.r, 1);
+          pv();
+        }
+      };
+
+      $('#fi').onchange = async e => {
+        $('#fe').textContent = '';
+        for (const file of e.target.files) {
+          if (file.size > 15e6) {
+            $('#fe').textContent = 'Max 15 MB per picture';
+            continue;
+          }
+          imgs.push(await shrink(file));
+        }
+        pv();
+        e.target.value = '';
+      };
+
+      $('#savep').onclick = async () => {
+        try {
+          await api(
+            editId ? '/api/admin/products/' + editId : '/api/admin/products',
+            editId ? 'PUT' : 'POST',
+            {
+              name_en: ne.value,
+              name_fr: nf.value,
+              desc_en: de.value,
+              desc_fr: df.value,
+              name_ar: na.value,
+              desc_ar: da.value,
+              price: pr.value,
+              old_price: op.value,
+              until: un.value,
+              images: imgs
+            }
+          );
+          editId = null;
+          prods();
+        } catch (e) {
+          $('#fe').textContent = e.message;
+        }
+      };
+
+      if ($('#cn')) {
+        $('#cn').onclick = () => {
+          editId = null;
+          prods();
+        };
+      }
+
+      v.onclick = async e => {
+        if (e.target.dataset.e) {
+          editId = e.target.dataset.e;
+          prods();
+          scrollTo(0, 0);
+        }
+        if (e.target.dataset.d && confirm('Delete this product?')) {
+          await api('/api/admin/products/' + e.target.dataset.d, 'DELETE');
+          prods();
+        }
+      };
+    }
+
+    async function comms() {
+      const l = await api('/api/admin/comments');
+      const os = await api('/api/admin/orders'), by = {};
+      os.forEach(o => { if (o.customer_id) (by[o.customer_id] = by[o.customer_id] || []).push(ref(o.id)); });
+      v.innerHTML = `<h2>Comments (${l.length})</h2>` + (l.map(c => `
+        <div class="cm">
+          <b>${esc(c.author)}</b> on <i>${esc(c.product_id)}</i> · <code>${esc(c.customer_id || '—')}</code>${by[c.customer_id] ? ' 🛒 ' + by[c.customer_id].join(', ') : ''} <small>${new Date(c.created_at).toLocaleString()}</small>
+          <button class="sm" data-c="${c.id}" style="float:right">Delete</button>
+          <div>${esc(c.text)}</div>
+        </div>
+      `).join('') || '<p>No comments.</p>');
+
+      v.onclick = async e => {
+        if (e.target.dataset.c && confirm('Delete this comment?')) {
+          await api('/api/admin/comments/' + e.target.dataset.c, 'DELETE');
+          comms();
+        }
+      };
+    }
+
+    const ref = id => 'FD-' + String(id).padStart(4, '0');
+
+    const waNum = p => {
+      let d = String(p || '').replace(/\D/g, '');
+      if (d.startsWith('00')) d = d.slice(2);
+      else if (d.startsWith('0')) d = '212' + d.slice(1);
+      return d.length >= 9 ? d : '';
+    };
+
+    const MSGS = {
+      fr: {
+        waiting: o => `Bonjour ${o.name}, nous avons bien reçu votre commande ${ref(o.id)} (${o.product} × ${o.qty}). Nous la préparons sous 1 à 2 jours. Merci ! - Filali Dates`,
+        ready: o => `Bonjour ${o.name}, votre commande ${ref(o.id)} est prête et sera bientôt livrée. - Filali Dates`,
+        delivering: o => `Bonjour ${o.name}, votre commande ${ref(o.id)} est en route vers vous. - Filali Dates`,
+        delivered: o => `Bonjour ${o.name}, votre commande ${ref(o.id)} (${o.product} × ${o.qty}) a été livrée. Merci pour votre confiance ! - Filali Dates`,
+        failed: o => `Bonjour ${o.name}, nous n'avons pas pu vous livrer la commande ${ref(o.id)}. Pouvez-vous nous contacter pour convenir d'une nouvelle livraison ? - Filali Dates`,
+        cancelled: o => `Bonjour ${o.name}, votre commande ${ref(o.id)} a été annulée. N'hésitez pas à nous contacter. - Filali Dates`
+      },
+      en: {
+        waiting: o => `Hello ${o.name}, we received your order ${ref(o.id)} (${o.product} × ${o.qty}). We prepare it within 1 to 2 days. Thank you! - Filali Dates`,
+        ready: o => `Hello ${o.name}, your order ${ref(o.id)} is ready and will be delivered soon. - Filali Dates`,
+        delivering: o => `Hello ${o.name}, your order ${ref(o.id)} is on its way to you. - Filali Dates`,
+        delivered: o => `Hello ${o.name}, your order ${ref(o.id)} (${o.product} × ${o.qty}) has been delivered. Thank you for your trust! - Filali Dates`,
+        failed: o => `Hello ${o.name}, we could not deliver your order ${ref(o.id)}. Please contact us so we can arrange a new delivery. - Filali Dates`,
+        cancelled: o => `Hello ${o.name}, your order ${ref(o.id)} has been cancelled. Feel free to contact us. - Filali Dates`
+      },
+      ar: {
+        waiting: o => `مرحبا ${o.name}، توصلنا بطلبك ${ref(o.id)} (${o.product} × ${o.qty}). سنحضره خلال يوم إلى يومين. شكرا! - تمور فيلالي`,
+        ready: o => `مرحبا ${o.name}، طلبك ${ref(o.id)} جاهز وسيصلك قريبا. - تمور فيلالي`,
+        delivering: o => `مرحبا ${o.name}، طلبك ${ref(o.id)} في الطريق إليك. - تمور فيلالي`,
+        delivered: o => `مرحبا ${o.name}، تم تسليم طلبك ${ref(o.id)} (${o.product} × ${o.qty}). شكرا على ثقتك! - تمور فيلالي`,
+        failed: o => `مرحبا ${o.name}، لم نتمكن من تسليم طلبك ${ref(o.id)}. المرجو التواصل معنا لتحديد موعد جديد. - تمور فيلالي`,
+        cancelled: o => `مرحبا ${o.name}، تم إلغاء طلبك ${ref(o.id)}. لا تترددوا في التواصل معنا. - تمور فيلالي`
+      }
+    };
+    const waMsg = o => ((MSGS[o.lang] || MSGS.fr)[o.status || 'waiting'] || MSGS.fr.waiting)(o);
+
+    const STATUS_LBL = { waiting: '⏳ Waiting', ready: '📦 Prepared', delivering: '🚚 On the way', delivered: '✅ Delivered', failed: '❌ Failed delivery', cancelled: '🚫 Cancelled' };
+
+    async function ords() {
+      const l = await api('/api/admin/orders');
+      const head = () => {
+        const c = s => l.filter(o => (o.status || 'waiting') === s).length;
+        $('#oh').textContent = `Orders (${l.length}) — Waiting ${c('waiting')} · Prepared ${c('ready')} · On the way ${c('delivering')} · Delivered ${c('delivered')} · Failed ${c('failed')} · Cancelled ${c('cancelled')}`;
+      };
+      const isValidEmail = email => !email || /^\S+@\S+\.\S+$/.test(String(email));
+      const feeTxt = o => !o.city ? '' : o.delivery_fee == null ? 'delivery: to confirm' : o.delivery_fee === 0 ? 'free delivery' : `delivery ${o.delivery_fee} DH`;
+      const rowCls = st => st === 'delivered' ? 'dn' : st === 'failed' ? 'fl' : st === 'cancelled' ? 'cx' : '';
+      const row = o => {
+        const st = o.status || 'waiting', t = new Date(o.created_at), okMail = isValidEmail(o.email);
+        return `<tr class="${rowCls(st)}" id="r${o.id}">
+          <td><b>${ref(o.id)}</b><br><code>${esc(o.customer_id || '—')}</code></td>
+          <td>${t.toLocaleDateString()}<br><small>${t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</small></td>
+          <td><b>${esc(o.product)}</b> × ${o.qty}<br><b>${o.total} DH</b><br><small>${esc(feeTxt(o))}</small></td>
+          <td><b>${esc(o.name)}</b><br>${esc(o.phone)}<br><small>${o.cin ? 'CIN ' + esc(o.cin) : '<span class="badge-err">⚠️ CIN not received yet</span>'}</small></td>
+          <td>${o.city ? '<b>' + esc(o.city) + '</b><br>' : ''}${esc(o.address || '—')}${o.location_url ? `<br><a href="${esc(o.location_url)}" target="_blank" rel="noopener">📍 map</a>` : ''}</td>
+          <td><span class="${okMail ? '' : 'invalid-email'}">${esc(o.email || '—')}</span>${okMail ? '' : ' <span class="badge-err">⚠️</span>'}</td>
+          <td><select class="st st-${st}" data-o="${o.id}">${Object.entries(STATUS_LBL).map(([k, lab]) => `<option value="${k}" ${k === st ? 'selected' : ''}>${lab}</option>`).join('')}</select>
+            <button class="sm" data-w="${o.id}" title="Message the customer on WhatsApp (text matches the status)">📲</button>
+            <br><small>${o.ready_by_name ? '📦 ' + esc(o.ready_by_name) : ''} ${o.courier_name ? '🚚 ' + esc(o.courier_name) : ''}</small></td>
+          <td><button class="del" data-x="${o.id}">🗑</button></td>
+        </tr>`;
+      };
+
+      v.innerHTML = `<h2 id="oh"></h2>
+        <div class="scroll ot"><table>
+          <tr><th>Order</th><th>Date</th><th>Product</th><th>Client</th><th>Delivery</th><th>Email</th><th>Status</th><th></th></tr>
+          ${l.map(row).join('')}
+        </table></div>`;
+      head();
+
+      const wa = o => {
+        const ph = waNum(o.phone);
+        if (ph) return window.open(`https://wa.me/${ph}?text=${encodeURIComponent(waMsg(o))}`, '_blank');
+        alert('No valid phone number for this customer.');
+      };
+
+      v.onchange = e => {
+        const i = e.target.dataset.o;
+        if (!i) return;
+        const st = e.target.value, o = l.find(x => x.id == i), prev = o.status || 'waiting';
+        let w = null;
+        o.status = st;
+        if (st === 'delivered') w = wa(o);
+        api(`/api/admin/orders/${i}/status`, 'PUT', { status: st }).then(() => {
+          e.target.className = 'st st-' + st;
+          e.target.closest('tr').className = rowCls(st);
+          head();
+        }).catch(() => { o.status = prev; e.target.value = prev; if (w) w.close(); });
+      };
+
+      v.onclick = async e => {
+        if (e.target.dataset.w) return wa(l.find(o => o.id == e.target.dataset.w));
+        const x = e.target.dataset.x;
+        if (!x || !confirm('Delete this order permanently?')) return;
+        await api('/api/admin/orders/' + x, 'DELETE');
+        l.splice(l.findIndex(o => o.id == x), 1);
+        $('#r' + x).remove();
+        head();
+      };
+    }
+
+    // ---------- Delivery: cities, fees, free-delivery threshold ----------
+    async function delivery() {
+      const d = await api('/api/admin/delivery');
+      const card = (c = {}) => `<div class="tc ${c.active === 0 ? 'off' : ''}" data-id="${c.id || ''}">
+        <label>City<input data-f="name" value="${esc(c.name || '')}"></label>
+        <label>City in Arabic<input data-f="name_ar" dir="rtl" value="${esc(c.name_ar || '')}"></label>
+        <label>Delivery fee (DH) — empty = confirmed on WhatsApp<input data-f="fee" type="number" min="0" step="1" value="${c.fee == null ? '' : c.fee}"></label>
+        <label>Estimated delivery time<input data-f="eta" placeholder="e.g. 1–2 days" value="${esc(c.eta || '')}"></label>
+        <label class="chk"><input type="checkbox" data-f="active" ${c.active === 0 ? '' : 'checked'}> Available to customers</label>
+        <div class="acts"><button class="cta sv" style="width:auto;padding:10px 22px;font-size:1rem">${c.id ? 'Save' : 'Add'}</button>
+          ${c.id ? '<button class="del rm">🗑 Delete</button>' : '<button class="cn rmnew">Cancel</button>'}</div>
+        <p class="msg"></p></div>`;
+      v.innerHTML = `<h2>Delivery</h2>
+        <p class="hint">Customers choose their city at checkout and see the fee and time you set here. <b>A city with an empty fee shows "to be confirmed on WhatsApp"</b> and the fee is not added to the total. The text "prepared in 1 day, 2 days maximum" is fixed on the product page and the checkout.</p>
+        <div class="tc" style="max-width:420px;margin-bottom:18px"><label>Free delivery from (DH) — 0 = never free<input id="ff" type="number" min="0" value="${d.free_from}"></label>
+          <button class="cta" id="ffs" style="width:auto;padding:10px 22px;font-size:1rem">Save</button><p class="msg" id="ffm"></p></div>
+        <h3 class="tsec">Cities (${d.cities.length}) <button class="cn add">+ Add city</button></h3>
+        <div class="tgrid" id="g-cities">${d.cities.map(c => card(c)).join('')}</div>`;
+      v.onchange = null;
+      v.onclick = async e => {
+        const t = e.target;
+        if (t.id === 'ffs') {
+          try { await api('/api/admin/delivery', 'PUT', { free_from: $('#ff').value }); $('#ffm').textContent = '✅ Saved'; } catch (er) { $('#ffm').textContent = '⚠️ ' + er.message; }
+          return;
+        }
+        if (t.classList.contains('add')) { $('#g-cities').insertAdjacentHTML('afterbegin', card()); return; }
+        if (t.classList.contains('rmnew')) { t.closest('.tc').remove(); return; }
+        const c = t.closest('.tc[data-id]');
+        if (!c) return;
+        const id = c.dataset.id, msg = c.querySelector('.msg');
+        try {
+          if (t.classList.contains('rm')) {
+            if (!confirm('Delete this city?')) return;
+            await api('/api/admin/cities/' + id, 'DELETE');
+            return delivery();
+          }
+          if (!t.classList.contains('sv')) return;
+          const body = {};
+          c.querySelectorAll('[data-f]').forEach(x => body[x.dataset.f] = x.type === 'checkbox' ? x.checked : x.value.trim());
+          await api(id ? '/api/admin/cities/' + id : '/api/admin/cities', id ? 'PUT' : 'POST', body);
+          if (!id) return delivery();
+          msg.textContent = '✅ Saved';
+          c.classList.toggle('off', !body.active);
+        } catch (er) { msg.textContent = '⚠️ ' + er.message; }
+      };
+    }
+
+    // ---------- Export: 3 CSV files ----------
+    function exportTab() {
+      v.innerHTML = `<h2>Export orders (CSV)</h2>
+        <p class="hint">Files open in Excel or Google Sheets. Pick the orders you want (or leave everything empty for all), then click one of the three files.
+          <b>Admin</b> = everything · <b>Warehouse</b> = only what to prepare (no client data) · <b>Delivery</b> = client, phone, address, location and amount.</p>
+        <div class="row"><label>From<input id="xf" type="date"></label><label>To<input id="xt" type="date"></label></div>
+        <label>Orders status<select id="xs"><option value="">All orders</option>${Object.entries(STATUS_LBL).map(([k, lab]) => `<option value="${k}">${lab}</option>`).join('')}</select></label>
+        <div class="xbtns">
+          <button class="cta" data-x="admin">📥 Admin file (everything)</button>
+          <button class="cta" data-x="warehouse">📦 Warehouse file</button>
+          <button class="cta" data-x="delivery">🚚 Delivery file</button>
+        </div><p class="msg" id="xm"></p>`;
+      v.onchange = null;
+      v.onclick = async e => {
+        const type = e.target.dataset.x;
+        if (!type) return;
+        const q = new URLSearchParams({ type, status: $('#xs').value, from: $('#xf').value, to: $('#xt').value });
+        try {
+          const r = await fetch('/api/admin/export?' + q, { headers: { 'x-token': tok || '' } });
+          if (r.status === 401) return logout();
+          if (!r.ok) throw new Error('Export failed');
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(await r.blob());
+          a.download = `orders-${type}-${new Date().toISOString().slice(0, 10)}.csv`;
+          document.body.appendChild(a); a.click(); a.remove();
+          setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+          $('#xm').textContent = '✅ Downloaded: ' + a.download;
+        } catch (er) { $('#xm').textContent = '⚠️ ' + er.message; }
+      };
+    }
+
+    const fmt = (n, r) => !r ? '' : r.ok ? `✔ ${n} sent` : r.skipped ? `– ${n} skipped (${r.error})` : `✖ ${n}: ${r.error}` +
+      (/initiate/i.test(r.error) ? ' → the person must open your bot and press Start' : /chat not found/i.test(r.error) ? ' → wrong chat ID (use the ID from @userinfobot)' : '');
+
+    async function team() {
+      const l = await api('/api/admin/staff');
+      const TITLE = { warehouse: '📦 Warehouse owners', delivery: '🚚 Delivery men' }, ADD = { warehouse: '+ Add warehouse person', delivery: '+ Add delivery man' };
+      const card = (r, s = {}) => `<div class="tc ${s.active === 0 ? 'off' : ''}" data-r="${r}" data-id="${s.id || ''}">
+        <label>Name<input data-f="name" value="${esc(s.name || '')}"></label>
+        <label>Language of messages<select data-f="lang">${['fr', 'en', 'ar'].map(k => `<option value="${k}" ${(s.lang || 'fr') === k ? 'selected' : ''}>${k.toUpperCase()}</option>`).join('')}</select></label>
+        <label>Telegram chat ID<input data-f="telegram_chat_id" inputmode="numeric" value="${esc(s.telegram_chat_id || '')}"></label>
+        <label>Email<input data-f="email" type="email" value="${esc(s.email || '')}"></label>
+        <label class="chk"><input type="checkbox" data-f="active" ${s.active === 0 ? '' : 'checked'}> Active (receives orders)</label>
+        <div class="acts"><button class="cta sv" style="width:auto;padding:10px 22px;font-size:1rem">${s.id ? 'Save' : 'Add'}</button>
+          ${s.id ? '<button class="cn ts">Save + test</button><button class="del rm">🗑 Delete</button>' : '<button class="cn rmnew">Cancel</button>'}</div>
+        <p class="msg"></p></div>`;
+      const section = r => `<h3 class="tsec">${TITLE[r]} (${l.filter(s => s.role === r).length}) <button class="cn add" data-r="${r}">${ADD[r]}</button></h3>
+        <div class="tgrid" id="g-${r}">${l.filter(s => s.role === r).map(s => card(r, s)).join('')}</div>`;
+      v.innerHTML = `<h2>Team</h2>
+        <p class="hint">Add as many people as you need. <b>Everyone active receives each order message, and the first person who taps the button takes it</b> (the others are told who took it). Untick <b>Active</b> to pause someone without deleting them. Each person must open your Telegram bot and press <b>Start</b>; their chat ID comes from <b>@userinfobot</b>. Emails need <code>BREVO_API_KEY</code> and <code>EMAIL_FROM</code> in Render.</p>
+        <p><button class="cn" id="diag">🔍 Check setup</button></p><div id="diagOut"></div>${section('warehouse')}${section('delivery')}`;
+      v.onchange = null;
+      v.onclick = async e => {
+        const t = e.target;
+        if (t.id === 'diag') {
+          $('#diagOut').textContent = 'Checking…';
+          try {
+            const d = await api('/api/admin/diag');
+            $('#diagOut').innerHTML = d.map(x => `<div class="dg ${x.ok ? 'ok' : 'bad'}">${x.ok ? '✔' : '✖'} <b>${esc(x.label)}</b> ${esc(x.detail)}</div>`).join('');
+          } catch (er) { $('#diagOut').textContent = '⚠️ ' + er.message; }
+          return;
+        }
+        if (t.classList.contains('add')) { $('#g-' + t.dataset.r).insertAdjacentHTML('afterbegin', card(t.dataset.r)); return; }
+        if (t.classList.contains('rmnew')) { t.closest('.tc').remove(); return; }
+        const c = t.closest('.tc');
+        if (!c) return;
+        const r = c.dataset.r, id = c.dataset.id, msg = c.querySelector('.msg');
+        try {
+          if (t.classList.contains('rm')) {
+            if (!confirm('Delete this person? They will stop receiving orders.')) return;
+            await api('/api/admin/staff/' + id, 'DELETE');
+            return team();
+          }
+          if (!t.matches('.sv, .ts')) return;
+          const body = { role: r };
+          c.querySelectorAll('[data-f]').forEach(x => body[x.dataset.f] = x.type === 'checkbox' ? x.checked : x.value.trim());
+          const saved = await api(id ? '/api/admin/staff/' + id : '/api/admin/staff', id ? 'PUT' : 'POST', body);
+          if (!id) return team();
+          if (t.matches('.ts')) {
+            const res = await api(`/api/admin/staff/${id}/test`, 'POST');
+            msg.innerHTML = '✅ Saved<br>' + [fmt('Telegram', res.telegram), fmt('Email', res.email)].filter(Boolean).map(esc).join('<br>');
+          } else msg.textContent = '✅ Saved';
+          c.classList.toggle('off', !body.active);
+        } catch (er) { msg.textContent = '⚠️ ' + er.message; }
+      };
+    }
+
+    // live view: the orders list refreshes by itself when the team updates a status
+    setInterval(() => {
+      if (tab === 'orders' && app.style.display !== 'none' && !(document.activeElement && document.activeElement.matches('select'))) ords().catch(() => {});
+    }, 20000);
+
+    if (tok) start();
+  </script>
+</body>
+</html>
